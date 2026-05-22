@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Perfume product available in the catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique product ID" },
+        "nombre": { "type": "string", "description": "Name of the fragrance" },
+        "marca": { "type": "string", "description": "Brand of the perfume" },
+        "genero": { "type": "string", "enum": ["Dama", "Caballero", "Unisex"], "description": "Intended gender" },
+        "notas": { "type": "array", "description": "Olfactory notes" },
+        "precio": { "type": "number", "description": "Price in original currency" },
+        "stock": { "type": "number", "description": "Units available in stock" },
+        "imagenUrl": { "type": "string", "description": "URL to image" },
+        "activo": { "type": "boolean", "description": "Whether the product is active in catalog" }
+      },
+      "required": ["id", "nombre", "marca", "genero", "notas", "precio", "stock", "imagenUrl", "activo"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Anonymous order checkout submission",
+      "type": "object",
+      "properties": {
+        "id_pedido": { "type": "string", "description": "Unique checkout order ID" },
+        "fecha": { "type": "string", "format": "date-time", "description": "When the order was placed" },
+        "cliente": {
+          "type": "object",
+          "properties": {
+            "nombre": { "type": "string" },
+            "celular": { "type": "string" },
+            "direccion": { "type": "string" }
+          },
+          "required": ["nombre", "celular", "direccion"]
+        },
+        "items": {
+          "type": "array",
+          "description": "Items purchased"
+        },
+        "total": { "type": "number" },
+        "metodo_pago": { "type": "string", "enum": ["Efectivo", "Transferencia", "Tarjeta"] },
+        "estado": { "type": "string", "enum": ["Pendiente", "Completado", "Cancelado"] }
+      },
+      "required": ["id_pedido", "fecha", "cliente", "items", "total", "metodo_pago", "estado"]
+    }
+  },
+  "firestore": {
+    "/productos/{productId}": {
+      "schema": "Product",
+      "description": "Collection of perfume products"
+    },
+    "/pedidos/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of orders sent by customers"
+    }
+  }
+}

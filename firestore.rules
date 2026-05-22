@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Global safety net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 2. Collection 'productos'
+    // - Anyone can read/list products to browse the catalog.
+    // - Writes are blocked (only managed by external administration suite).
+    match /productos/{productId} {
+      allow read, list: if true;
+      allow write: if false;
+    }
+
+    // 3. Collection 'pedidos'
+    // - Guests can create (write) a new order.
+    // - All reads, updates, and deletes are disabled (protects client PII from other users).
+    match /pedidos/{orderId} {
+      allow create: if isValidId(orderId) 
+        && request.resource.data.id_pedido == orderId
+        && request.resource.data.cliente.nombre is string
+        && request.resource.data.cliente.nombre.size() > 0
+        && request.resource.data.cliente.nombre.size() <= 100
+        && request.resource.data.cliente.celular is string
+        && request.resource.data.cliente.celular.size() >= 7
+        && request.resource.data.cliente.celular.size() <= 20
+        && request.resource.data.cliente.direccion is string
+        && request.resource.data.cliente.direccion.size() > 0
+        && request.resource.data.cliente.direccion.size() <= 300
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.total is number
+        && request.resource.data.total > 0
+        && request.resource.data.estado == "Pendiente";
+        
+      allow read, update, delete: if false;
+    }
+  }
+}

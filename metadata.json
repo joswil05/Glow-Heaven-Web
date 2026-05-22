@@ -1,0 +1,6 @@
+{
+  "name": "Glow Heaven Perfumes",
+  "description": "Exclusive fragrance boutique. Landing page, interactive scent matching quiz, live product catalog with real-time stock validation, and seamless direct WhatsApp checkout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
