@@ -10,6 +10,8 @@
   --color-editorial-black: #1A1A1A;
   --color-editorial-sand: #F0EEE9;
   --color-editorial-clay: #E5E3DD;
+  --color-editorial-card: #FFFFFF;
+  --color-editorial-card-border: rgba(26, 26, 26, 0.1);
 }
 
 body {
@@ -17,6 +19,21 @@ body {
   color: var(--color-editorial-black);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Luxury Dark Theme Mode: Velvet Dusk */
+.dark {
+  --color-editorial-ivory: #0D0E0C;
+  --color-editorial-black: #F3F1EC;
+  --color-editorial-sand: #171815;
+  --color-editorial-clay: #232520;
+  --color-editorial-card: #141512;
+  --color-editorial-card-border: rgba(243, 241, 236, 0.12);
+}
+
+/* Universal smooth transitions for elegant theme switching */
+body, header, footer, section, div, select, button, input {
+  transition: background-color 0.45s cubic-bezier(0.23, 1, 0.32, 1), border-color 0.45s cubic-bezier(0.23, 1, 0.32, 1), text-shadow 0.45s ease, color 0.4s ease;
 }
 
 /* Custom fade transitions */

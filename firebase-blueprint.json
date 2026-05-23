@@ -2,57 +2,131 @@
   "entities": {
     "Product": {
       "title": "Product",
-      "description": "Perfume product available in the catalog",
+      "description": "Un producto de perfume o accesorio en el catálogo de Glow Heaven",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "Unique product ID" },
-        "nombre": { "type": "string", "description": "Name of the fragrance" },
-        "marca": { "type": "string", "description": "Brand of the perfume" },
-        "genero": { "type": "string", "enum": ["Dama", "Caballero", "Unisex"], "description": "Intended gender" },
-        "notas": { "type": "array", "description": "Olfactory notes" },
-        "precio": { "type": "number", "description": "Price in original currency" },
-        "stock": { "type": "number", "description": "Units available in stock" },
-        "imagenUrl": { "type": "string", "description": "URL to image" },
-        "activo": { "type": "boolean", "description": "Whether the product is active in catalog" }
+        "id": {
+          "type": "string",
+          "description": "ID unico del producto"
+        },
+        "nombre": {
+          "type": "string",
+          "description": "Nombre de la fragancia o del bolso"
+        },
+        "marca": {
+          "type": "string",
+          "description": "Marca fabricante"
+        },
+        "genero": {
+          "type": "string",
+          "description": "Genero al que esta dirigido"
+        },
+        "categoria": {
+          "type": "string",
+          "description": "Categoria de producto: perfume o accesorio"
+        },
+        "notas": {
+          "type": "string",
+          "description": "Notas olfativas para perfumes, representadas como texto o lista libre"
+        },
+        "color": {
+          "type": "string",
+          "description": "Color para accesorios"
+        },
+        "material": {
+          "type": "string",
+          "description": "Material para accesorios"
+        },
+        "precio": {
+          "type": "number",
+          "description": "Precio unitario del producto en USD"
+        },
+        "stock": {
+          "type": "number",
+          "description": "Cantidad disponible en inventario"
+        },
+        "imagenUrl": {
+          "type": "string",
+          "description": "URL de la imagen del producto"
+        },
+        "activo": {
+          "type": "boolean",
+          "description": "Indica si el producto esta activo"
+        },
+        "descripcion": {
+          "type": "string",
+          "description": "Descripcion detallada del producto"
+        }
       },
-      "required": ["id", "nombre", "marca", "genero", "notas", "precio", "stock", "imagenUrl", "activo"]
+      "required": [
+        "id",
+        "nombre",
+        "marca",
+        "genero",
+        "categoria",
+        "precio",
+        "stock",
+        "imagenUrl",
+        "activo"
+      ]
     },
     "Order": {
       "title": "Order",
-      "description": "Anonymous order checkout submission",
+      "description": "Un pedido de compra en Glow Heaven",
       "type": "object",
       "properties": {
-        "id_pedido": { "type": "string", "description": "Unique checkout order ID" },
-        "fecha": { "type": "string", "format": "date-time", "description": "When the order was placed" },
+        "id_pedido": {
+          "type": "string",
+          "description": "ID de transaccion de la base de datos o alias"
+        },
+        "fecha": {
+          "type": "string",
+          "description": "Fecha y hora de creacion de la preventa"
+        },
         "cliente": {
-          "type": "object",
-          "properties": {
-            "nombre": { "type": "string" },
-            "celular": { "type": "string" },
-            "direccion": { "type": "string" }
-          },
-          "required": ["nombre", "celular", "direccion"]
+          "type": "string",
+          "description": "Informacion estructurada del cliente"
         },
         "items": {
-          "type": "array",
-          "description": "Items purchased"
+          "type": "string",
+          "description": "Articulos incluidos en la compra"
         },
-        "total": { "type": "number" },
-        "metodo_pago": { "type": "string", "enum": ["Efectivo", "Transferencia", "Tarjeta"] },
-        "estado": { "type": "string", "enum": ["Pendiente de Pago", "Completado", "Cancelado"] },
-        "expiraEn": { "type": "object", "description": "Firestore Timestamp representing expiration date (30 mins from creation)" }
+        "total": {
+          "type": "number",
+          "description": "Monto total de la compra"
+        },
+        "metodo_pago": {
+          "type": "string",
+          "description": "Metodo de pago elegido"
+        },
+        "estado": {
+          "type": "string",
+          "description": "Estado de procesamiento del pedido"
+        },
+        "expiraEn": {
+          "type": "string",
+          "description": "Vigencia de reserva"
+        }
       },
-      "required": ["id_pedido", "fecha", "cliente", "items", "total", "metodo_pago", "estado", "expiraEn"]
+      "required": [
+        "id_pedido",
+        "fecha",
+        "cliente",
+        "items",
+        "total",
+        "metodo_pago",
+        "estado"
+      ]
     }
   },
   "firestore": {
-    "/productos/{productId}": {
+    "productos": {
       "schema": "Product",
-      "description": "Collection of perfume products"
+      "description": "Catalogo de productos en tiempo real"
     },
-    "/pedidos/{orderId}": {
+    "pedidos": {
       "schema": "Order",
-      "description": "Collection of orders sent by customers"
+      "description": "Ventas y reservas realizadas por los usuarios"
     }
   }
 }

@@ -83,9 +83,9 @@ export const Footer: React.FC = () => {
   ];
 
   return (
-    <footer className="bg-white border-t border-editorial-black/10 text-editorial-black">
+    <footer className="bg-editorial-card border-t border-editorial-card-border text-editorial-black">
       {/* Upper Policy Section (Accordions) */}
-      <div className="max-w-7xl mx-auto px-6 sm:px-10 py-10 sm:py-14 border-b border-editorial-black/5">
+      <div className="max-w-7xl mx-auto px-6 sm:px-10 py-10 sm:py-14 border-b border-editorial-card-border">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-4 text-left">
             <span className="font-serif italic font-bold text-xl uppercase tracking-wider block">
@@ -94,7 +94,7 @@ export const Footer: React.FC = () => {
             <p className="text-editorial-black/50 text-[11px] font-mono uppercase tracking-widest mt-1.5">
               Esencias De Distinción • 2026
             </p>
-            <p className="text-zinc-400 text-xs font-light leading-relaxed mt-4 max-w-sm">
+            <p className="text-editorial-black/60 text-xs font-light leading-relaxed mt-4 max-w-sm">
               Una cuidada selección de creaciones premium. Control total de stock y transacciones verificadas con protección integrada contra la venta de inventario fantasma.
             </p>
           </div>
@@ -109,14 +109,14 @@ export const Footer: React.FC = () => {
                 return (
                   <div
                     key={p.id}
-                    className="border border-editorial-black/10 rounded-xl bg-editorial-sand/10 overflow-hidden transition-all hover:bg-editorial-sand/20"
+                    className="border border-editorial-card-border rounded-xl bg-editorial-sand/20 overflow-hidden transition-all hover:bg-editorial-sand/35"
                   >
                     <button
                       onClick={() => toggleAccordion(p.id)}
                       className="w-full flex items-center justify-between p-4 text-left focus:outline-none"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="p-1.5 bg-white rounded-md border border-editorial-black/5 shadow-xs">
+                        <div className="p-1.5 bg-editorial-card rounded-md border border-editorial-card-border shadow-xs">
                           {p.icon}
                         </div>
                         <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-editorial-black/85">
@@ -143,7 +143,7 @@ export const Footer: React.FC = () => {
                           }}
                           transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
                         >
-                          <div className="p-4 pt-1 border-t border-editorial-black/5 bg-white">
+                          <div className="p-4 pt-1 border-t border-editorial-card-border bg-editorial-card">
                             {p.content}
                           </div>
                         </motion.div>
@@ -162,7 +162,7 @@ export const Footer: React.FC = () => {
         {/* Left side */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 items-center text-center sm:text-left">
           <div className="flex items-center gap-2">
-            <span className="text-[9.5px] font-serif italic text-emerald-800 font-semibold uppercase bg-emerald-50 border border-emerald-100 rounded-md px-2 py-0.5 shadow-xs">Originalidad Certificada</span>
+            <span className="text-[9.5px] font-serif italic text-emerald-600 dark:text-emerald-400 font-semibold uppercase bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2 py-0.5 shadow-xs">Originalidad Certificada</span>
           </div>
           <span className="hidden sm:inline text-editorial-black/20">|</span>
           <span className="text-editorial-black/60 font-mono text-[9px]">Acompañamiento VIP vía WhatsApp 24/7</span>
@@ -170,16 +170,16 @@ export const Footer: React.FC = () => {
 
         {/* Payment Icons Represented Sophisticatedly */}
         <div className="flex flex-col items-center sm:items-end gap-2.5">
-          <span className="text-[8px] font-bold text-zinc-400 tracking-[0.2em] font-mono">
+          <span className="text-[8px] font-bold text-editorial-black/40 tracking-[0.2em] font-mono">
             Canales de Pago Habilitados
           </span>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 bg-neutral-150 border border-zinc-200/50 rounded-md px-2.5 py-1 text-zinc-700 text-[9px] font-bold font-mono tracking-normal leading-none hover:bg-neutral-200 transition-colors">
+            <div className="flex items-center gap-1 bg-editorial-sand border border-editorial-card-border rounded-md px-2.5 py-1 text-editorial-black/80 text-[9px] font-bold font-mono tracking-normal leading-none hover:bg-editorial-clay transition-colors">
               <Landmark className="w-3.5 h-3.5 text-editorial-black" />
               <span>TRANSFERENCIA BANCARIA</span>
             </div>
-            <div className="flex items-center gap-1 bg-neutral-150 border border-zinc-200/50 rounded-md px-2.5 py-1 text-zinc-700 text-[9px] font-bold font-mono tracking-normal leading-none hover:bg-neutral-200 transition-colors">
-              <HandCoins className="w-3.5 h-3.5 text-emerald-700" />
+            <div className="flex items-center gap-1 bg-editorial-sand border border-editorial-card-border rounded-md px-2.5 py-1 text-editorial-black/80 text-[9px] font-bold font-mono tracking-normal leading-none hover:bg-editorial-clay transition-colors">
+              <HandCoins className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>CONTRAENTREGA COORD.</span>
             </div>
           </div>
@@ -187,7 +187,7 @@ export const Footer: React.FC = () => {
       </div>
 
       {/* Fine Print Footer Copyright */}
-      <div className="w-full bg-neutral-50 border-t border-neutral-100/60 py-4 px-6 text-center text-zinc-400 text-[9px] font-mono uppercase tracking-[0.25em]">
+      <div className="w-full bg-editorial-sand border-t border-editorial-card-border py-4 px-6 text-center text-editorial-black/40 text-[9px] font-mono uppercase tracking-[0.25em]">
         <span>© 2026 GLOW HEAVEN CO. Todos los derechos reservados • Conexión Cifrada Transf. SSL 256-bits</span>
       </div>
     </footer>

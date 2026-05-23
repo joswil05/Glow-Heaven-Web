@@ -91,16 +91,16 @@ export const Hero: React.FC<HeroProps> = ({ onScrollToCatalog, onOpenQuiz }) => 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.3 }}
-          className="relative bg-white/95 backdrop-blur-md border border-editorial-black/10 p-6 sm:p-8 max-w-xs shadow-sm flex flex-col items-center text-center"
+          className="relative bg-editorial-card/90 backdrop-blur-md border border-editorial-card-border p-6 sm:p-8 max-w-xs shadow-xl flex flex-col items-center text-center rounded-2xl"
         >
-          <Compass className="w-6 h-6 text-editorial-black mb-3.5" />
+          <Compass className="w-6.5 h-6.5 text-editorial-black mb-3.5" />
           <h3 className="font-serif italic text-lg text-editorial-black mb-1">Recomendación Sugerida</h3>
           <p className="text-[11px] leading-relaxed text-editorial-black/60 font-light mb-4">
             "Un aroma de ámbar, vainilla y mística orquídea. La firma invisible perfecta."
           </p>
           <button 
             onClick={onOpenQuiz}
-            className="text-[9px] uppercase tracking-widest font-mono font-bold text-editorial-black border-b border-editorial-black pb-0.5 hover:opacity-60 transition-opacity"
+            className="text-[9px] uppercase tracking-widest font-mono font-bold text-editorial-black border-b border-editorial-black pb-0.5 hover:opacity-60 transition-opacity cursor-pointer"
           >
             Iniciar Quiz Olfativo →
           </button>

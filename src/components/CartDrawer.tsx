@@ -36,14 +36,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onProce
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 24, stiffness: 180 }}
-            className="fixed right-0 top-0 bottom-0 w-full sm:max-w-md bg-white border-l border-editorial-black/10 shadow-2xl z-50 flex flex-col"
+            className="fixed right-0 top-0 bottom-0 w-full sm:max-w-md bg-editorial-card border-l border-editorial-card-border shadow-2xl z-50 flex flex-col"
           >
             {/* Header */}
-            <div className="p-6 border-b border-editorial-black/10 flex items-center justify-between bg-editorial-sand">
-              <div className="flex items-center gap-2.5 text-editorial-black">
+            <div className="p-6 border-b border-editorial-card-border flex items-center justify-between bg-editorial-sand">
+              <div className="flex items-center gap-2.5 text-editorial-black font-medium">
                 <ShoppingCart className="w-4 h-4 text-editorial-black" />
                 <span className="font-serif italic font-bold text-lg">Mi Bolsa</span>
-                <span className="text-[10px] bg-editorial-black text-white px-2.5 py-0.5 rounded-sm font-mono tracking-wider font-semibold uppercase">
+                <span className="text-[10px] bg-editorial-black text-editorial-ivory px-2.5 py-0.5 rounded-sm font-mono tracking-wider font-semibold uppercase">
                   {cartCount.toString().padStart(2, '0')} i.
                 </span>
               </div>
@@ -106,7 +106,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onProce
                         <div className="flex items-center justify-between mt-2.5">
                           <span className="text-sm font-semibold text-editorial-black">${item.product.precio} USD</span>
                           
-                          <div className="flex items-center gap-2 border border-editorial-black/10 bg-white rounded-md p-0.5">
+                          <div className="flex items-center gap-2 border border-editorial-card-border bg-editorial-card rounded-md p-0.5">
                             <button
                               onClick={() => updateQuantity(item.product.id, -1)}
                               className="p-1 px-1.5 text-editorial-black/50 hover:text-editorial-black hover:bg-editorial-sand rounded cursor-pointer transition-colors"
@@ -151,7 +151,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onProce
                       onClose();
                       onProceedToCheckout();
                     }}
-                    className="w-full py-4 bg-editorial-black text-white hover:opacity-90 font-bold text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm"
+                    className="w-full py-4 bg-editorial-black text-editorial-ivory hover:opacity-90 font-bold text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm"
                   >
                     <ReceiptText className="w-3.5 h-3.5" />
                     Proceder al Checkout

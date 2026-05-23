@@ -21,9 +21,43 @@ export const ProductCatalog: React.FC = () => {
   const [compareList, setCompareList] = useState<Product[]>([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
 
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
+  const [detailActiveTab, setDetailActiveTab] = useState<'esencia' | 'descripcion' | 'garantia'>('esencia');
+
   const [toasts, setToasts] = useState<{ id: number; message: string; submessage?: string }[]>([]);
   const [addedProducts, setAddedProducts] = useState<Record<string, boolean>>({});
   const [floatingChecks, setFloatingChecks] = useState<{ id: number; productId: string }[]>([]);
+
+  const getPremiumStats = (prod: Product) => {
+    if (prod.categoria === 'accesorio') {
+      return {
+        durabilidad: 'Excelente (Herrajes Premium)',
+        impermeabilidad: 'Resistente a Salpicaduras',
+        peso: 'Ligero y Ergonómico',
+        confeccion: 'Costura artesanal de refuerzo doble'
+      };
+    }
+    
+    const name = prod.nombre.toLowerCase();
+    let intensidad = 7;
+    let longevidad = 8;
+    let estela = 7;
+    let estacion = 'Todo el año 🍂🌸';
+    
+    if (name.includes('ambre') || name.includes('sweet') || name.includes('wood') || name.includes('oud') || name.includes('oro')) {
+      intensidad = 9;
+      longevidad = 9;
+      estela = 9;
+      estacion = 'Otoño / Invierno ❄️🍂';
+    } else if (name.includes('bloom') || name.includes('citrus') || name.includes('ocean') || name.includes('fresca') || name.includes('lily') || name.includes('flores')) {
+      intensidad = 6;
+      longevidad = 7;
+      estela = 6;
+      estacion = 'Primavera / Verano ☀️🌸';
+    }
+    
+    return { intensidad, longevidad, estela, estacion };
+  };
 
   const toggleCompare = (prod: Product) => {
     if (compareList.some((p) => p.id === prod.id)) {
@@ -146,11 +180,11 @@ export const ProductCatalog: React.FC = () => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="px-3.5 py-2.5 bg-white border border-editorial-black/10 text-editorial-black text-[10px] uppercase font-bold tracking-widest cursor-pointer focus:outline-none focus:border-editorial-black/60 rounded-md font-sans"
+              className="px-3.5 py-2.5 bg-editorial-card border border-editorial-card-border text-editorial-black text-[10px] uppercase font-bold tracking-widest cursor-pointer focus:outline-none focus:border-editorial-black/60 rounded-md font-sans"
             >
-              <option value="newest">Novedades ✨</option>
-              <option value="price-asc">Precio: de Menor a Mayor ➔</option>
-              <option value="price-desc">Precio: de Mayor a Menor ➔</option>
+              <option value="newest" className="bg-editorial-card text-editorial-black">Novedades ✨</option>
+              <option value="price-asc" className="bg-editorial-card text-editorial-black">Precio: de Menor a Mayor ➔</option>
+              <option value="price-desc" className="bg-editorial-card text-editorial-black">Precio: de Mayor a Menor ➔</option>
             </select>
           </div>
 
@@ -197,7 +231,7 @@ export const ProductCatalog: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar Panel */}
-      <div className="bg-editorial-sand/40 border border-editorial-black/10 rounded-xl p-5 md:p-6 mb-10 flex flex-col gap-4">
+      <div className="bg-editorial-sand/40 border border-editorial-card-border rounded-xl p-5 md:p-6 mb-10 flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-editorial-black/40" />
@@ -212,14 +246,14 @@ export const ProductCatalog: React.FC = () => {
               }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-editorial-black/10 text-sm focus:outline-none focus:border-editorial-black/60 text-editorial-black placeholder-editorial-black/30 font-light rounded-lg"
+              className="w-full pl-10 pr-4 py-2.5 bg-editorial-card border border-editorial-card-border text-sm focus:outline-none focus:border-editorial-black/60 text-editorial-black placeholder-editorial-black/30 font-light rounded-lg"
             />
           </div>
         </div>
 
         {/* Expandable filters selection */}
         {(showFilters || selectedGender !== 'Todos' || selectedBrand !== 'Todos') && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-editorial-black/10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-editorial-card-border">
             {/* Gender filters */}
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-editorial-black/40 block mb-2.5 font-mono">Orientación de Género</span>
@@ -230,8 +264,8 @@ export const ProductCatalog: React.FC = () => {
                     onClick={() => setSelectedGender(g as any)}
                     className={`px-3.5 py-1.5 text-[10px] uppercase tracking-wider font-semibold transition-all cursor-pointer border ${
                       selectedGender === g
-                        ? 'bg-editorial-black text-white border-editorial-black'
-                        : 'bg-white hover:bg-editorial-sand text-editorial-black border-editorial-black/10'
+                        ? 'bg-editorial-black text-editorial-ivory border-editorial-black'
+                        : 'bg-editorial-card hover:bg-editorial-sand text-editorial-black border-editorial-card-border'
                     }`}
                   >
                     {g}
@@ -250,8 +284,8 @@ export const ProductCatalog: React.FC = () => {
                     onClick={() => setSelectedBrand(b)}
                     className={`px-3.5 py-1.5 text-[10px] uppercase tracking-wider font-semibold transition-all cursor-pointer border ${
                       selectedBrand === b
-                        ? 'bg-editorial-black text-white border-editorial-black'
-                        : 'bg-white hover:bg-editorial-sand text-editorial-black border-editorial-black/10'
+                        ? 'bg-editorial-black text-editorial-ivory border-editorial-black'
+                        : 'bg-editorial-card hover:bg-editorial-sand text-editorial-black border-editorial-card-border'
                     }`}
                   >
                     {b}
@@ -305,13 +339,26 @@ export const ProductCatalog: React.FC = () => {
                 className="flex flex-col overflow-hidden group border-b border-editorial-black/10 pb-5"
               >
                 {/* Product lookbook image (3:4 portrait) */}
-                <div className="relative aspect-[3/4] bg-editorial-clay overflow-hidden border border-editorial-black/10 rounded-xl">
+                <div 
+                  onClick={() => {
+                    setSelectedDetailProduct(prod);
+                    setDetailActiveTab('esencia');
+                  }}
+                  className="relative aspect-[3/4] bg-editorial-clay overflow-hidden border border-editorial-black/10 rounded-xl cursor-pointer group/img"
+                >
                   <img
                     src={prod.imagenUrl}
                     alt={prod.nombre}
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500 opacity-90 group-hover:opacity-100"
+                    className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-700 opacity-90 group-hover:opacity-100"
                   />
+                  
+                  {/* Micro-interaction hover details overlay */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-neutral-950/40 to-transparent p-4 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-end justify-center">
+                    <span className="bg-white/95 backdrop-blur-xs text-editorial-black text-[9px] font-mono tracking-widest uppercase py-1.5 px-3 rounded shadow-md border border-editorial-black/5 transform translate-y-2 group-hover/img:translate-y-0 transition-all duration-300 font-bold">
+                      Detalles Aura ✦
+                    </span>
+                  </div>
                   
                   {/* Floating Micro-interaction checkmark animations */}
                   <AnimatePresence>
@@ -338,7 +385,7 @@ export const ProductCatalog: React.FC = () => {
                   </AnimatePresence>
 
                   {/* Portrait labels */}
-                  <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex flex-col gap-1 items-end">
+                  <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex flex-col gap-1 items-end z-10">
                     <span className="text-[8px] sm:text-[9px] uppercase font-bold tracking-widest bg-white/95 backdrop-blur-xs border border-editorial-black/10 text-editorial-black px-1.5 sm:px-2.5 py-0.5 font-mono shadow-xs rounded-[4px]">
                       {prod.genero}
                     </span>
@@ -370,8 +417,9 @@ export const ProductCatalog: React.FC = () => {
                   <motion.a
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    onClick={(e) => e.stopPropagation()}
                     href={`https://api.whatsapp.com/send?phone=573000000000&text=${encodeURIComponent(
-                      `Hola Glow Heaven! Me gustaría realizar una consulta rápida sobre el producto "${prod.nombre}" de la marca "Glow Heaven". ¿Tienen disponibilidad e información de stock en tiempo real? ¡Muchas gracias!`
+                      `Hola Glow Heaven! Me gustaría realizar una consulta rápida sobre el producto "${prod.nombre}" de la marca ${prod.marca}. ¿Tienen disponibilidad e información de stock en tiempo real? ¡Muchas gracias!`
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -391,11 +439,17 @@ export const ProductCatalog: React.FC = () => {
                         {prod.marca}
                       </span>
                       <span className="text-[9px] sm:text-xs uppercase tracking-wider font-mono text-zinc-400 font-medium">
-                        {hasStock ? `${prod.stock} u.` : 'Agotado'}
+                        {hasStock ? `${prod.stock} u. disp` : 'Sin stock'}
                       </span>
                     </div>
 
-                    <h3 className="text-sm sm:text-base md:text-lg font-bold tracking-tight text-editorial-black mt-1 leading-snug line-clamp-1">
+                    <h3 
+                      onClick={() => {
+                        setSelectedDetailProduct(prod);
+                        setDetailActiveTab('esencia');
+                      }}
+                      className="text-sm sm:text-base md:text-lg font-bold tracking-tight text-editorial-black mt-1 leading-snug line-clamp-1 cursor-pointer hover:underline decoration-editorial-black/40 decoration-1"
+                    >
                       {prod.nombre}
                     </h3>
                     
@@ -599,54 +653,54 @@ export const ProductCatalog: React.FC = () => {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
-              className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-y-auto shadow-2xl relative border border-neutral-200"
+              className="bg-editorial-card rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-y-auto shadow-2xl relative border border-editorial-card-border text-editorial-black"
             >
               {/* Modal header */}
-              <div className="sticky top-0 bg-white/95 backdrop-blur-md p-5 sm:p-6 border-b border-zinc-100 flex items-center justify-between z-10">
+              <div className="sticky top-0 bg-editorial-card/95 backdrop-blur-md p-5 sm:p-6 border-b border-editorial-card-border flex items-center justify-between z-10">
                 <div>
-                  <span className="text-[10px] uppercase tracking-[0.25em] text-zinc-400 font-mono font-bold block">Comparador Exclusivo</span>
-                  <h3 className="text-xl sm:text-2xl font-serif text-neutral-950 mt-1">Análisis Detallado de Selección</h3>
+                  <span className="text-[10px] uppercase tracking-[0.25em] text-editorial-black/40 font-mono font-bold block">Comparador Exclusivo</span>
+                  <h3 className="text-xl sm:text-2xl font-serif text-editorial-black mt-1">Análisis Detallado de Selección</h3>
                 </div>
                 <button
                   onClick={() => setShowCompareModal(false)}
-                  className="p-2 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-neutral-950 transition-colors cursor-pointer"
+                  className="p-2 hover:bg-editorial-sand/70 rounded-lg text-editorial-black/60 hover:text-editorial-black transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Side-by-side Layout */}
-              <div className="grid grid-cols-2 divide-x divide-zinc-100 min-w-[500px] overflow-x-auto">
+              <div className="grid grid-cols-2 divide-x divide-editorial-card-border min-w-[500px] overflow-x-auto">
                 {compareList.map((cp) => {
                   const hasStock = cp.stock > 0;
                   return (
                     <div key={cp.id} className="p-5 sm:p-8 flex flex-col gap-5 sm:gap-6">
                       {/* Product Visual */}
-                      <div className="aspect-[4/3] w-full max-w-[240px] mx-auto bg-neutral-50 rounded-xl overflow-hidden border border-neutral-100 relative shadow-sm">
+                      <div className="aspect-[4/3] w-full max-w-[240px] mx-auto bg-editorial-sand rounded-xl overflow-hidden border border-editorial-card-border relative shadow-sm">
                         <img
                           src={cp.imagenUrl}
                           alt={cp.nombre}
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
-                        <span className="absolute top-2 right-2 text-[8px] uppercase tracking-wider font-extrabold bg-neutral-950 text-white px-2 py-0.5 rounded font-mono shadow-xs">
+                        <span className="absolute top-2 right-2 text-[8px] uppercase tracking-wider font-extrabold bg-editorial-black text-editorial-ivory px-2 py-0.5 rounded font-mono shadow-xs">
                           {cp.categoria === 'perfume' ? 'Perfume ✨' : 'Accesorio 👜'}
                         </span>
                       </div>
 
                       {/* Title, Brand, and Price */}
-                      <div className="text-center pb-4 border-b border-zinc-100">
-                        <span className="text-[9px] uppercase tracking-widest text-zinc-400 font-bold font-mono block">
+                      <div className="text-center pb-4 border-b border-editorial-card-border">
+                        <span className="text-[9px] uppercase tracking-widest text-editorial-black/40 font-bold font-mono block">
                           {cp.marca}
                         </span>
-                        <h4 className="text-base sm:text-lg font-bold font-serif text-neutral-950 mt-1 min-h-[3rem] line-clamp-2">
+                        <h4 className="text-base sm:text-lg font-bold font-serif text-editorial-black mt-1 min-h-[3rem] line-clamp-2">
                           {cp.nombre}
                         </h4>
-                        <p className="text-lg sm:text-xl font-bold text-neutral-950 mt-2 font-mono">
+                        <p className="text-lg sm:text-xl font-bold text-editorial-black mt-2 font-mono">
                           ${cp.precio} USD
                         </p>
-                        <span className={`text-[9px] uppercase tracking-wider font-semibold font-mono mt-1.5 inline-block px-2.5 py-0.5 rounded-full ${
-                          hasStock ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' : 'bg-red-50 text-red-800 border border-red-100'
+                        <span className={`text-[9.5px] uppercase tracking-wider font-semibold font-mono mt-1.5 inline-block px-2.5 py-0.5 rounded-full ${
+                          hasStock ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                         }`}>
                           {hasStock ? `${cp.stock} unidades` : 'Agotado'}
                         </span>
@@ -655,15 +709,15 @@ export const ProductCatalog: React.FC = () => {
                       {/* Specs section */}
                       <div className="space-y-4 text-xs font-sans">
                         <div>
-                          <span className="block text-[8px] uppercase font-bold tracking-widest text-zinc-400 font-mono mb-1">Descripción</span>
-                          <p className="text-neutral-600 font-light leading-relaxed text-[11px] sm:text-xs">
+                          <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 font-mono mb-1">Descripción</span>
+                          <p className="text-editorial-black/75 font-light leading-relaxed text-[11px] sm:text-xs">
                             {cp.descripcion}
                           </p>
                         </div>
 
                         <div>
-                          <span className="block text-[8px] uppercase font-bold tracking-widest text-zinc-400 font-mono mb-1">Compatibilidad</span>
-                          <span className="text-neutral-900 font-mono text-[11px] uppercase tracking-wider bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200/50">
+                          <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 font-mono mb-1">Compatibilidad</span>
+                          <span className="text-editorial-black font-mono text-[11px] uppercase tracking-wider bg-editorial-sand px-2.0 py-0.5 rounded border border-editorial-card-border">
                             {cp.genero}
                           </span>
                         </div>
@@ -671,10 +725,10 @@ export const ProductCatalog: React.FC = () => {
                         {/* Olfactive specifications or material/color criteria */}
                         {cp.categoria === 'perfume' ? (
                           <div>
-                            <span className="block text-[8px] uppercase font-bold tracking-widest text-zinc-400 font-mono mb-1.5">Acordes Olfativos</span>
+                            <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 font-mono mb-1.5">Acordes Olfativos</span>
                             <div className="flex flex-wrap gap-1">
                               {cp.notas && cp.notas.map((n) => (
-                                <span key={n} className="bg-editorial-sand/40 text-[9px] text-editorial-black px-2 py-0.5 rounded border border-editorial-black/5 uppercase tracking-widest font-mono font-medium">
+                                <span key={n} className="bg-editorial-sand text-[9px] text-editorial-black px-2 py-0.5 rounded border border-editorial-card-border uppercase tracking-widest font-mono font-medium">
                                   {n}
                                 </span>
                               ))}
@@ -684,16 +738,16 @@ export const ProductCatalog: React.FC = () => {
                           <div className="space-y-3">
                             {cp.color && (
                               <div>
-                                <span className="block text-[8px] uppercase font-bold tracking-widest text-zinc-400 font-mono mb-0.5">Color de Diseño</span>
-                                <span className="text-neutral-900 font-mono text-[11px] font-semibold">
+                                <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 font-mono mb-0.5">Color de Diseño</span>
+                                <span className="text-editorial-black font-mono text-[11px] font-semibold">
                                   {cp.color}
                                 </span>
                               </div>
                             )}
                             {cp.material && (
                               <div>
-                                <span className="block text-[8px] uppercase font-bold tracking-widest text-zinc-400 font-mono mb-0.5">Material de Confección</span>
-                                <span className="text-amber-900 font-mono text-[11px] font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200/50">
+                                <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 font-mono mb-0.5">Material de Confección</span>
+                                <span className="text-amber-600 dark:text-amber-400 font-mono text-[11px] font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                                   {cp.material}
                                 </span>
                               </div>
@@ -703,7 +757,7 @@ export const ProductCatalog: React.FC = () => {
                       </div>
 
                       {/* Add to action triggers */}
-                      <div className="mt-auto pt-4 border-t border-zinc-100 flex flex-col gap-2">
+                      <div className="mt-auto pt-4 border-t border-editorial-card-border flex flex-col gap-2">
                         {hasStock ? (
                           <button
                             onClick={() => {
@@ -742,6 +796,257 @@ export const ProductCatalog: React.FC = () => {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* Immersive Product Detail Modal: Scent Aura & Hand-Craft details */}
+      <AnimatePresence>
+        {selectedDetailProduct && (() => {
+          const prod = selectedDetailProduct;
+          const hasStock = prod.stock > 0;
+          const stats = getPremiumStats(prod);
+          return (
+            <div className="fixed inset-0 bg-neutral-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.94, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 10 }}
+                transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                className="bg-editorial-card border border-editorial-card-border rounded-2xl w-full max-w-3xl max-h-[92vh] md:max-h-[85vh] overflow-y-auto shadow-2xl relative text-editorial-black"
+                id="product-detail-modal"
+              >
+                {/* Close Button */}
+                <button
+                  onClick={() => setSelectedDetailProduct(null)}
+                  className="absolute top-4 right-4 p-2 bg-editorial-black/10 hover:bg-editorial-black/25 text-editorial-black hover:text-editorial-black rounded-full transition-all z-20 cursor-pointer"
+                  title="Cerrar panel de detalles"
+                  id="close-detail-modal-btn"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                {/* Editorial Columns */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+                  {/* Left Column: Premium visual look & Season aura */}
+                  <div className="relative aspect-[4/3] md:aspect-auto md:h-full bg-editorial-clay overflow-hidden flex items-center justify-center p-4 border-b md:border-b-0 md:border-r border-editorial-clay/20 min-h-[280px]">
+                    <img
+                      src={prod.imagenUrl}
+                      alt={prod.nombre}
+                      referrerPolicy="no-referrer"
+                      className="absolute inset-0 w-full h-full object-cover opacity-95"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/70 via-transparent to-transparent pointer-events-none" />
+                    
+                    {/* Footnote stamp */}
+                    <div className="absolute bottom-4 left-4 text-left text-white z-10">
+                      <span className="text-[9px] uppercase tracking-[0.2em] text-white/60 font-mono block">Atelier Curado</span>
+                      <p className="font-serif italic text-lg">{prod.marca}</p>
+                    </div>
+
+                    <span className="absolute top-4 left-4 text-[8px] uppercase tracking-[0.2em] font-extrabold bg-editorial-black text-white px-3 py-1 rounded-[4px] font-mono shadow-md">
+                      {prod.categoria === 'perfume' ? 'Aroma Curado ✨' : 'Accesorio de Confección 👜'}
+                    </span>
+                  </div>
+
+                  {/* Right Column: Dynamic Tabs and Spec Sheet */}
+                  <div className="p-6 sm:p-8 flex flex-col justify-between">
+                    <div>
+                      {/* Top Header */}
+                      <span className="text-[9px] uppercase tracking-[0.25em] text-editorial-black/50 font-bold font-mono block">{prod.marca}</span>
+                      <h4 className="text-2xl font-serif text-editorial-black mt-1 leading-tight">{prod.nombre}</h4>
+                      <p className="text-xl font-bold text-editorial-black mt-2 font-mono">${prod.precio} USD</p>
+                      
+                      {/* Tab selection */}
+                      <div className="flex border-b border-editorial-black/10 gap-5 mt-5 mb-5 overflow-x-auto scrollbar-none">
+                        {[
+                          { id: 'esencia', label: prod.categoria === 'perfume' ? 'Aura Olfativa' : 'Confección' },
+                          { id: 'descripcion', label: 'Inspiración' },
+                          { id: 'garantia', label: 'Envío & Garantía' },
+                        ].map((t) => {
+                          const isTabActive = detailActiveTab === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              onClick={() => setDetailActiveTab(t.id as any)}
+                              className={`pb-2 text-[10px] uppercase tracking-[0.2em] font-extrabold transition-all relative shrink-0 cursor-pointer ${
+                                isTabActive ? 'text-editorial-black' : 'text-editorial-black/40 hover:text-editorial-black/70'
+                              }`}
+                            >
+                              {t.label}
+                              {isTabActive && (
+                                <motion.div
+                                  layoutId="detailActiveTabIndicator"
+                                  className="absolute bottom-0 left-0 right-0 h-[2px] bg-editorial-black"
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Tab Content rendering */}
+                      <div className="min-h-[160px]">
+                        {/* Tab 1: Esencia / Confección */}
+                        {detailActiveTab === 'esencia' && (
+                          <div className="space-y-3.5 fade-in">
+                            {prod.categoria === 'perfume' ? (
+                              <div className="space-y-3 font-sans">
+                                <div>
+                                  <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 font-mono mb-1.5">Acordes Destacados</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {prod.notas && prod.notas.map((n) => (
+                                      <span key={n} className="bg-editorial-sand text-[9px] text-editorial-black px-2 py-0.5 rounded border border-editorial-black/5 uppercase tracking-widest font-mono font-bold">
+                                        {n}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Aura rating animation stats */}
+                                <div className="space-y-2 pt-2.5">
+                                  <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 font-mono">Porcentaje de Presencia</span>
+                                  <div>
+                                    <div className="flex justify-between text-[9px] uppercase tracking-wider font-mono text-editorial-black/60 mb-1">
+                                      <span>Intensidad de Entrada</span>
+                                      <span>{('intensidad' in stats) ? `${stats.intensidad * 10}%` : '80%'}</span>
+                                    </div>
+                                    <div className="h-1 bg-editorial-clay/45 rounded-full overflow-hidden">
+                                      <motion.div 
+                                        initial={{ width: 0 }}
+                                        animate={{ width: ('intensidad' in stats) ? `${stats.intensidad * 10}%` : '80%' }}
+                                        transition={{ duration: 0.8, ease: "easeOut" }}
+                                        className="h-full bg-amber-500 rounded-full"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between text-[9px] uppercase tracking-wider font-mono text-editorial-black/60 mb-1">
+                                      <span>Longevidad en Piel</span>
+                                      <span>{('longevidad' in stats) ? `${stats.longevidad * 10}%` : '80%'}</span>
+                                    </div>
+                                    <div className="h-1 bg-editorial-clay/45 rounded-full overflow-hidden">
+                                      <motion.div 
+                                        initial={{ width: 0 }}
+                                        animate={{ width: ('longevidad' in stats) ? `${stats.longevidad * 10}%` : '80%' }}
+                                        transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
+                                        className="h-full bg-amber-500 rounded-full"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between text-[9px] uppercase tracking-wider font-mono text-editorial-black/60 mb-1">
+                                      <span>Estancia & Estela (Aura)</span>
+                                      <span>{('estela' in stats) ? `${stats.estela * 10}%` : '90%'}</span>
+                                    </div>
+                                    <div className="h-1 bg-editorial-clay/45 rounded-full overflow-hidden">
+                                      <motion.div 
+                                        initial={{ width: 0 }}
+                                        animate={{ width: ('estela' in stats) ? `${stats.estela * 10}%` : '70%' }}
+                                        transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+                                        className="h-full bg-amber-500 rounded-full"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-3 font-mono text-[10.5px]">
+                                <div className="border-b border-editorial-black/5 pb-2">
+                                  <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 mb-0.5">Material Textil</span>
+                                  <span className="text-editorial-black font-semibold text-xs">{prod.material || 'Piel Vacuna Genuina'}</span>
+                                </div>
+                                <div className="border-b border-editorial-black/5 pb-2">
+                                  <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 mb-0.5">Sintonía de Tono</span>
+                                  <span className="text-editorial-black font-semibold text-xs">{prod.color || 'Detalle Natural'}</span>
+                                </div>
+                                <div className="border-b border-editorial-black/5 pb-2">
+                                  <span className="block text-[8px] uppercase font-bold tracking-widest text-editorial-black/40 mb-0.5">Enfoque de Diseño</span>
+                                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold text-xs">Unidades Limitadas de Temporada</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Tab 2: Inspiración */}
+                        {detailActiveTab === 'descripcion' && (
+                          <div className="space-y-3.5 text-xs text-editorial-black/75 leading-relaxed font-light fade-in">
+                            <p>{prod.descripcion || 'Un aroma formulado por Glow Heaven en colaboración con perfumistas de alta costura, logrando acordes intensamente duraderos.'}</p>
+                            <div className="border-l-2 border-amber-500/30 pl-3 py-1 italic text-editorial-black/60">
+                              "En Glow Heaven, cada creación responde a un minucioso ritual técnico inspirado en la alta costura y las tradiciones olfativas tradicionales."
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tab 3: Envío & Garantía */}
+                        {detailActiveTab === 'garantia' && (
+                          <div className="space-y-3.5 text-xs text-editorial-black/75 leading-relaxed font-light fade-in">
+                            <div className="flex items-start gap-2.5">
+                              <span className="text-amber-500 mt-0.5">✦</span>
+                              <p><strong>Envío Nacional Garantizado:</strong> Despacho prioritario asegurado en caja de lujo premium rígida.</p>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                              <span className="text-amber-500 mt-0.5">✦</span>
+                              <p><strong>Devoluciones sin Trámites:</strong> Si el aroma no cumple con tus sintonías ideales, puedes cambiarlo dentro de las primeras 72 horas.</p>
+                            </div>
+                            <div className="flex items-start gap-2.5">
+                              <span className="text-amber-500 mt-0.5">✦</span>
+                              <p><strong>Seguridad y Transacción:</strong> Pago encriptado SSL y sincronización de inventarios directamente con la base de datos de stock.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Operational Actions section */}
+                    <div className="pt-6 border-t border-editorial-black/10 mt-6 space-y-3">
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="text-editorial-black/50 uppercase font-bold tracking-widest">Estado</span>
+                        <span className={`font-bold uppercase px-2 py-0.5 rounded ${
+                          hasStock ? 'text-emerald-600 bg-emerald-500/10' : 'text-rose-500 bg-rose-500/10'
+                        }`}>
+                          {hasStock ? `En stock` : 'Agotado'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-2.5">
+                        {hasStock ? (
+                          <button
+                            onClick={() => {
+                              handleAddToCart(prod);
+                            }}
+                            className="flex-1 py-3 bg-editorial-black hover:bg-neutral-800 text-editorial-ivory text-xs uppercase font-extrabold tracking-widest flex items-center justify-center gap-2 rounded-lg cursor-pointer transition-colors shadow-sm"
+                            id="add-detail-to-cart-btn"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5 text-editorial-clay" />
+                            Añadir a mi Bolsa
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="flex-1 py-3 border border-editorial-black/15 text-editorial-black/30 text-xs uppercase font-extrabold tracking-widest cursor-not-allowed text-center bg-editorial-clay/20 rounded-lg"
+                          >
+                            Sin Stock Disponible
+                          </button>
+                        )}
+                        <a
+                          href={`https://api.whatsapp.com/send?phone=573000000000&text=${encodeURIComponent(
+                            `Hola Glow Heaven! Me interesa recibir asesoramiento prioritario para el aroma/accesorio exclusivo "${prod.nombre}". ¿Podrían comentarme más de la disponibilidad?`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="py-3 px-5 border border-emerald-600 dark:border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-extrabold text-[11px] uppercase tracking-widest text-center flex items-center justify-center gap-2 rounded-lg hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          Consultar Asesor
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
     </div>
   );

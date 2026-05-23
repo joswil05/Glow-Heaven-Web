@@ -165,10 +165,10 @@ export const GeminiChatbot: React.FC = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 30, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="bg-white border border-editorial-black/10 rounded-2xl shadow-xl w-80 sm:w-96 h-[520px] flex flex-col overflow-hidden mb-4"
+            className="bg-editorial-card border border-editorial-card-border rounded-2xl shadow-xl w-80 sm:w-96 h-[520px] flex flex-col overflow-hidden mb-4"
           >
             {/* Header */}
-            <div className="bg-editorial-black px-5 py-4 text-white flex items-center justify-between">
+            <div className="bg-editorial-black px-5 py-4 text-editorial-ivory flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-1.5 bg-editorial-ivory/15 rounded-lg text-editorial-sand">
                   <Bot className="w-4 h-4 animate-pulse text-editorial-clay" />
@@ -180,7 +180,7 @@ export const GeminiChatbot: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1 text-editorial-clay/60 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                className="p-1 text-editorial-clay/60 hover:text-editorial-ivory hover:bg-white/10 rounded-full transition-colors cursor-pointer"
                 title="Cerrar sommelier"
               >
                 <X className="w-4 h-4" />
@@ -193,7 +193,7 @@ export const GeminiChatbot: React.FC = () => {
                 if (m.role === 'system') {
                   return (
                     <div key={m.id} className="flex justify-center my-1.5">
-                      <span className="text-[10px] bg-editorial-sand border border-editorial-black/5 text-editorial-black/75 px-3 py-1.5 rounded-full inline-block font-mono">
+                      <span className="text-[10px] bg-editorial-sand border border-editorial-card-border text-editorial-black/75 px-3 py-1.5 rounded-full inline-block font-mono">
                         {m.text}
                       </span>
                     </div>
@@ -208,7 +208,7 @@ export const GeminiChatbot: React.FC = () => {
                   >
                     <div className={`max-w-[85%] rounded-2xl p-3.5 shadow-xs border ${
                       isAssistant
-                        ? 'bg-white border-editorial-black/5 text-editorial-black'
+                        ? 'bg-editorial-card border-editorial-card-border text-editorial-black'
                         : 'bg-editorial-black text-editorial-ivory border-editorial-black'
                     }`}>
                       <div className="text-[11px] sm:text-xs leading-relaxed whitespace-pre-line font-light">
@@ -226,7 +226,7 @@ export const GeminiChatbot: React.FC = () => {
 
               {isTyping && (
                 <div className="flex justify-start">
-                  <div className="bg-white border border-editorial-black/5 rounded-2xl p-3.5 flex items-center gap-2 shadow-xs">
+                  <div className="bg-editorial-card border border-editorial-card-border rounded-2xl p-3.5 flex items-center gap-2 shadow-xs">
                     <Loader2 className="w-3.5 h-3.5 text-editorial-black animate-spin" />
                     <span className="text-[10px] uppercase tracking-widest font-mono text-editorial-black/40">Inhalando aromas...</span>
                   </div>
@@ -238,12 +238,12 @@ export const GeminiChatbot: React.FC = () => {
 
             {/* Quick Suggestions - Scrollable horizontally */}
             {messages.length === 1 && (
-              <div className="px-4 py-2 bg-editorial-sand/30 border-t border-editorial-black/5 flex gap-2 overflow-x-auto scrollbar-none">
+              <div className="px-4 py-2 bg-editorial-sand/30 border-t border-editorial-card-border flex gap-2 overflow-x-auto scrollbar-none">
                 {suggestions.map((s, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSuggest(s)}
-                    className="flex-shrink-0 text-[10px] bg-white border border-editorial-black/10 text-editorial-black hover:border-editorial-black px-3 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap font-light"
+                    className="flex-shrink-0 text-[10px] bg-editorial-card border border-editorial-card-border text-editorial-black hover:border-editorial-black px-3 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap font-light"
                   >
                     {s}
                   </button>
@@ -257,14 +257,14 @@ export const GeminiChatbot: React.FC = () => {
                 e.preventDefault();
                 handleSendMessage(inputText);
               }}
-              className="p-3 bg-white border-t border-editorial-black/10 flex gap-2 items-center"
+              className="p-3 bg-editorial-card border-t border-editorial-card-border flex gap-2 items-center"
             >
               <input
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="Pregunta o describe tu acorde..."
-                className="flex-1 px-4 py-2.5 bg-editorial-sand/20 border border-editorial-black/15 focus:border-editorial-black text-xs rounded-xl focus:outline-none placeholder-editorial-black/35 font-light"
+                className="flex-1 px-4 py-2.5 bg-editorial-sand/20 border border-editorial-card-border focus:border-editorial-black text-xs rounded-xl focus:outline-none placeholder-editorial-black/35 font-light"
               />
               <button
                 type="submit"

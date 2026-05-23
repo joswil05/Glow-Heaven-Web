@@ -13,7 +13,7 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3005;
 
 // Helper to get GoogleGenAI client safely
 function getGeminiClient() {

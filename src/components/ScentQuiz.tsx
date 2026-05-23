@@ -167,13 +167,13 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
   ];
 
   return (
-    <div id="ai-quiz-container" className="bg-white border border-editorial-black/10 rounded-2xl p-4 sm:p-8 md:p-10 max-w-2xl mx-auto shadow-sm relative overflow-hidden">
+    <div id="ai-quiz-container" className="bg-editorial-card border border-editorial-card-border rounded-2xl p-4 sm:p-8 md:p-10 max-w-2xl mx-auto shadow-xl relative overflow-hidden text-editorial-black">
       {/* Editorial Decorative Details */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-editorial-sand/50 rounded-full filter blur-2xl" />
 
       {/* Mode Switches - Only show if not in recommendation screen */}
       {step < 4 && (
-        <div className="flex border-b border-editorial-black/10 mb-8 overflow-hidden rounded-t-lg bg-editorial-sand/30">
+        <div className="flex border-b border-editorial-card-border mb-8 overflow-hidden rounded-t-lg bg-editorial-sand/30">
           <button
             onClick={() => {
               setSearchMode('ai');
@@ -181,7 +181,7 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
             }}
             className={`flex-1 py-3 text-xs uppercase tracking-widest font-bold flex items-center justify-center gap-2 transition-all ${
               searchMode === 'ai'
-                ? 'bg-white border-b-2 border-editorial-black text-editorial-black shadow-sm'
+                ? 'bg-editorial-card border-b-2 border-editorial-black text-editorial-black shadow-sm'
                 : 'text-editorial-black/40 hover:text-editorial-black/75'
             }`}
           >
@@ -195,7 +195,7 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
             }}
             className={`flex-1 py-3 text-xs uppercase tracking-widest font-bold flex items-center justify-center gap-2 transition-all ${
               searchMode === 'traditional'
-                ? 'bg-white border-b-2 border-editorial-black text-editorial-black shadow-sm'
+                ? 'bg-editorial-card border-b-2 border-editorial-black text-editorial-black shadow-sm'
                 : 'text-editorial-black/40 hover:text-editorial-black/75'
             }`}
           >
@@ -265,12 +265,12 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 placeholder="Escribe con tus propias palabras. Ejemplo: Busco una combinación de perfume dulce con jazmín y un bolso a juego de noche en tonos neutros o cuero premium para una gala..."
-                className="w-full p-4 border border-editorial-black/20 focus:border-editorial-black focus:ring-2 focus:ring-editorial-black/10 text-xs sm:text-sm rounded-xl focus:outline-none transition-all duration-300 bg-editorial-sand/15 hover:bg-editorial-sand/25 focus:bg-white placeholder-editorial-black/35 font-light leading-relaxed shadow-xs"
+                className="w-full p-4 border border-editorial-card-border focus:border-editorial-black focus:ring-2 focus:ring-editorial-black/10 text-xs sm:text-sm rounded-xl focus:outline-none transition-all duration-300 bg-editorial-sand/15 hover:bg-editorial-sand/25 focus:bg-editorial-card placeholder-editorial-black/35 font-light leading-relaxed shadow-xs"
               />
             </div>
 
             {aiError && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl leading-relaxed">
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl leading-relaxed">
                 {aiError}
               </div>
             )}
@@ -287,7 +287,7 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
                     key={idx}
                     type="button"
                     onClick={() => setAiPrompt(s)}
-                    className="p-3 border border-editorial-black/10 hover:border-editorial-black/40 bg-editorial-sand/30 hover:bg-white text-left text-[11px] rounded-lg transition-all cursor-pointer text-editorial-black/75 truncate"
+                    className="p-3 border border-editorial-card-border hover:border-editorial-black/40 bg-editorial-sand/30 hover:bg-editorial-card text-left text-[11px] rounded-lg transition-all cursor-pointer text-editorial-black/75 truncate"
                   >
                     "{s}"
                   </motion.button>
@@ -295,7 +295,7 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
               </div>
             </div>
 
-            <div className="pt-4 border-t border-editorial-black/10 flex justify-end">
+            <div className="pt-4 border-t border-editorial-card-border flex justify-end">
               <motion.button
                 whileHover={{ scale: !aiPrompt.trim() ? 1 : 1.02 }}
                 whileTap={{ scale: !aiPrompt.trim() ? 1 : 0.98 }}
@@ -466,17 +466,17 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
             transition={{ duration: 0.4 }}
             className="text-center"
           >
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 border border-editorial-black/10 bg-editorial-sand text-editorial-black rounded-sm text-[10px] uppercase tracking-[0.2em] font-mono mb-6">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 border border-editorial-card-border bg-editorial-sand text-editorial-black rounded-sm text-[10px] uppercase tracking-[0.2em] font-mono mb-6">
               <Sparkles className="w-3 h-3" />
               {searchMode === 'ai' ? 'Sommelier Inteligente Gemini' : 'Recomendación Olfativa'}
             </div>
 
-            <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center text-left bg-editorial-sand/60 p-5 sm:p-8 rounded-2xl border border-editorial-black/10 mb-8 w-full">
+            <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center text-left bg-editorial-sand/60 p-5 sm:p-8 rounded-2xl border border-editorial-card-border mb-8 w-full">
               <img
                 src={recommendation.imagenUrl}
                 alt={recommendation.nombre}
                 referrerPolicy="no-referrer"
-                className="w-28 h-36 xs:w-32 xs:h-40 md:w-44 md:h-52 rounded-xl object-cover bg-neutral-200 shadow-sm border border-editorial-black/10"
+                className="w-28 h-36 xs:w-32 xs:h-40 md:w-44 md:h-52 rounded-xl object-cover bg-neutral-200/20 shadow-sm border border-editorial-card-border"
               />
               <div className="flex-1 w-full">
                 <span className="text-[9px] sm:text-[10px] uppercase text-zinc-400 font-bold tracking-widest font-mono">
@@ -499,7 +499,7 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
                 {recommendation.categoria === 'perfume' && recommendation.notas && (
                   <div className="flex flex-wrap gap-1 mt-4">
                     {recommendation.notas.map((n) => (
-                      <span key={n} className="text-[8px] sm:text-[9px] uppercase tracking-wider px-2 py-0.5 bg-white text-editorial-black rounded border border-editorial-black/5 font-mono">
+                      <span key={n} className="text-[8px] sm:text-[9px] uppercase tracking-wider px-2 py-0.5 bg-editorial-clay text-editorial-black rounded border border-editorial-card-border font-mono font-medium">
                         {n}
                       </span>
                     ))}
@@ -509,25 +509,25 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
                 {recommendation.categoria === 'accesorio' && (
                   <div className="flex flex-wrap gap-1.5 mt-4">
                     {recommendation.color && (
-                      <span className="text-[8px] sm:text-[9px] uppercase tracking-widest font-mono font-semibold px-2 py-0.5 bg-neutral-100 text-neutral-700 rounded border border-neutral-200">
+                      <span className="text-[8px] sm:text-[9px] uppercase tracking-widest font-mono font-semibold px-2 py-0.5 bg-editorial-clay text-editorial-black rounded border border-editorial-card-border">
                         Color: {recommendation.color}
                       </span>
                     )}
                     {recommendation.material && (
-                      <span className="text-[8px] sm:text-[9px] uppercase tracking-widest font-mono font-semibold px-2 py-0.5 bg-orange-50 text-amber-900 rounded border border-amber-200">
+                      <span className="text-[8px] sm:text-[9px] uppercase tracking-widest font-mono font-semibold px-2 py-0.5 bg-amber-500/15 text-amber-500 rounded border border-amber-500/20">
                         {recommendation.material}
                       </span>
                     )}
                   </div>
                 )}
 
-                <div className="mt-5 flex items-baseline justify-between xs:justify-start gap-4 border-t border-editorial-black/5 pt-4">
+                <div className="mt-5 flex items-baseline justify-between xs:justify-start gap-4 border-t border-editorial-card-border pt-4">
                   <div>
                     <span className="text-[8px] sm:text-[9px] text-editorial-black/40 block font-mono uppercase tracking-wider">Inversión</span>
                     <span className="text-xl sm:text-2xl font-bold text-editorial-black">${recommendation.precio} USD</span>
                   </div>
                   {recommendation.stock > 0 ? (
-                    <span className="text-[11px] uppercase tracking-wider text-emerald-600 font-bold font-mono">✓ Disponible ({recommendation.stock} u.)</span>
+                    <span className="text-[11px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold font-mono">✓ Disponible ({recommendation.stock} u.)</span>
                   ) : (
                     <span className="text-[11px] uppercase tracking-wider text-rose-500 font-bold font-mono">Agotado</span>
                   )}

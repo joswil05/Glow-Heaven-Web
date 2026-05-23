@@ -70,7 +70,7 @@ export const Testimonials: React.FC = () => {
   };
 
   return (
-    <section className="bg-editorial-sand/15 border-t border-editorial-black/5 py-16 sm:py-20 px-6 sm:px-10 overflow-hidden">
+    <section className="bg-editorial-sand/15 border-t border-editorial-card-border py-16 sm:py-20 px-6 sm:px-10 overflow-hidden text-editorial-black">
       <div className="max-w-6xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -99,7 +99,7 @@ export const Testimonials: React.FC = () => {
             <motion.div
               key={review.id}
               variants={cardVariants}
-              className="bg-white border border-editorial-black/10 rounded-2xl p-6 sm:p-8 flex flex-col justify-between shadow-xs relative hover:shadow-md transition-all duration-300"
+              className="bg-editorial-card border border-editorial-card-border rounded-2xl p-6 sm:p-8 flex flex-col justify-between shadow-xs relative hover:shadow-md transition-all duration-300"
             >
               {/* Quote icon watermark */}
               <Quote className="absolute top-6 right-6 w-8 h-8 text-editorial-sand/30" />
@@ -117,13 +117,13 @@ export const Testimonials: React.FC = () => {
                 </p>
               </div>
 
-              <div className="border-t border-editorial-black/5 pt-4 mt-auto">
+              <div className="border-t border-editorial-card-border pt-4 mt-auto">
                 <div className="flex items-center justify-between">
                   <div>
                     <h5 className="text-[11px] sm:text-xs font-bold text-editorial-black uppercase tracking-wider flex items-center gap-1.5">
                       {review.name}
                       <span className="inline-flex" title="Comprador Verificado">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 fill-emerald-50" />
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600 fill-emerald-500/10" />
                       </span>
                     </h5>
                     <span className="text-[10px] text-zinc-400 block mt-0.5">{review.location}</span>
@@ -132,7 +132,7 @@ export const Testimonials: React.FC = () => {
                 </div>
                 
                 {/* Tag of purchased perfume */}
-                <div className="mt-3.5 flex items-center gap-1.5 bg-editorial-sand/40 border border-editorial-black/5 rounded-md px-2.5 py-1 self-start">
+                <div className="mt-3.5 flex items-center gap-1.5 bg-editorial-sand/40 border border-editorial-card-border rounded-md px-2.5 py-1 self-start">
                   <span className="text-[9px] text-editorial-black/45 font-mono uppercase tracking-wider">Adquirido:</span>
                   <span className="text-[9.5px] font-medium text-editorial-black/80 font-serif leading-none">{review.perfume}</span>
                 </div>

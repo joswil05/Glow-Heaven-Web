@@ -52,21 +52,21 @@ export const TrustBar: React.FC = () => {
   };
 
   return (
-    <div className="w-full bg-white relative py-6 sm:py-8 px-4 sm:px-6 md:px-8 overflow-hidden">
+    <div className="w-full bg-editorial-card relative py-6 sm:py-8 px-4 sm:px-6 md:px-8 overflow-hidden text-editorial-black">
       {/* Premium Border expansion line effects on enter */}
       <motion.div 
         initial={{ scaleX: 0 }}
         whileInView={{ scaleX: 1 }}
         viewport={{ once: true, margin: "-50px" }}
         transition={{ duration: 1.2, ease: "easeOut" }}
-        className="absolute top-0 left-0 right-0 h-[1px] bg-editorial-black/5 origin-left"
+        className="absolute top-0 left-0 right-0 h-[1px] bg-editorial-card-border origin-left"
       />
       <motion.div 
         initial={{ scaleX: 0 }}
         whileInView={{ scaleX: 1 }}
         viewport={{ once: true, margin: "-50px" }}
         transition={{ duration: 1.2, ease: "easeOut" }}
-        className="absolute bottom-0 left-0 right-0 h-[1px] bg-editorial-black/5 origin-right"
+        className="absolute bottom-0 left-0 right-0 h-[1px] bg-editorial-card-border origin-right"
       />
 
       <div className="max-w-7xl mx-auto">
@@ -75,7 +75,7 @@ export const TrustBar: React.FC = () => {
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, margin: "-100px" }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 divide-y md:divide-y-0 md:divide-x divide-editorial-black/10"
+          className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 divide-y md:divide-y-0 md:divide-x divide-editorial-card-border"
         >
           {steps.map((step, idx) => (
             <motion.div

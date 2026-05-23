@@ -14,7 +14,7 @@ import { ProductCatalog } from './components/ProductCatalog';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutForm } from './components/CheckoutForm';
 import { GeminiChatbot } from './components/GeminiChatbot';
-import { ShoppingBag, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
+import { ShoppingBag, Sparkles, AlertCircle, RefreshCw, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 function Header({ onOpenCart, onStartQuiz, view, setView }: { 
@@ -24,6 +24,22 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
   setView: (v: 'main' | 'checkout') => void;
 }) {
   const { cartCount } = useCart();
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return document.documentElement.classList.contains('dark') || localStorage.getItem('theme') === 'dark';
+    }
+    return false;
+  });
+
+  React.useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [darkMode]);
 
   return (
     <header className="sticky top-0 bg-editorial-ivory/90 backdrop-blur-md border-b border-editorial-black/10 z-30 px-6 sm:px-10 py-5 flex items-center justify-between">
@@ -56,6 +72,34 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
         >
           <Sparkles className="w-3.5 h-3.5 text-editorial-black/60" />
           Quiz Olfativo
+        </button>
+
+        {/* Dynamic Atmosphere Toggler Accent */}
+        <button
+          onClick={() => setDarkMode(!darkMode)}
+          className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest font-semibold text-editorial-black/70 hover:text-editorial-black transition-colors cursor-pointer"
+          title="Alternar atmósfera de la web (Marfil / Terciopelo)"
+          aria-label="Alternar temática"
+        >
+          {darkMode ? (
+            <motion.div 
+              initial={{ rotate: -30, scale: 0.9 }} 
+              animate={{ rotate: 0, scale: 1 }}
+              className="flex items-center gap-1.5 text-amber-500 hover:text-amber-400"
+            >
+              <Sun className="w-3.5 h-3.5 fill-amber-500/10" />
+              <span className="hidden leading-none md:inline text-[9.5px] font-mono font-bold">Marfil</span>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ rotate: 30, scale: 0.9 }} 
+              animate={{ rotate: 0, scale: 1 }}
+              className="flex items-center gap-1.5 text-indigo-500 hover:text-indigo-600"
+            >
+              <Moon className="w-3.5 h-3.5 fill-indigo-500/10" />
+              <span className="hidden leading-none md:inline text-[9.5px] font-mono font-bold">Terciopelo</span>
+            </motion.div>
+          )}
         </button>
 
         <button
