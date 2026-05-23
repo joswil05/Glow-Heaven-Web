@@ -10,6 +10,61 @@ import { DashboardOverview } from './components/DashboardOverview';
 import { QuickSaleModal } from './components/QuickSaleModal';
 import { InventoryManagement } from './components/InventoryManagement';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from './types/erp';
+import { createProduct, addInventoryBatch } from './services/inventoryService';
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary] Fallo detectado:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-neutral-100 dark:bg-neutral-950">
+          <div className="bg-white dark:bg-neutral-900 border border-rose-200 dark:border-rose-800 p-6 rounded-2xl max-w-md shadow-lg flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/30 flex items-center justify-center text-rose-600 dark:text-rose-400 mb-4 animate-pulse">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 mb-2">Error de Renderizado</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4 leading-relaxed">
+              La vista de inventario ha experimentado un fallo y se ha aislado para mantener estable el resto de la aplicación.
+            </p>
+            <pre className="w-full text-[10px] text-rose-500 font-mono bg-neutral-100 dark:bg-neutral-950 p-3 rounded border border-neutral-200 dark:border-neutral-800 overflow-x-auto text-left max-h-32 mb-4">
+              {this.state.error?.message || String(this.state.error)}
+            </pre>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer transition-colors"
+            >
+              Reintentar Renderizado
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [products, setProducts] = useState<ERPProduct[]>([]);
@@ -174,9 +229,21 @@ export default function App() {
             onOpenQuickSale={() => setShowQuickSale(true)}
           />
         ) : (
-          <InventoryManagement 
-            products={products}
-          />
+          <ErrorBoundary>
+            {/* Cortocircuito defensivo para asegurar que productos está cargado antes de renderizar */}
+            {(products && products.length >= 0) ? (
+              <InventoryManagement 
+                products={products}
+                onCreateProduct={createProduct}
+                onAddInventoryBatch={addInventoryBatch}
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-neutral-100 dark:bg-neutral-950">
+                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-xs text-neutral-400 font-mono">Cargando catálogo de productos...</p>
+              </div>
+            )}
+          </ErrorBoundary>
         )}
 
         {/* MODAL F2: VENTA RÁPIDA SUPERPUESTA */}

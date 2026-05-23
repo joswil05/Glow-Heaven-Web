@@ -7,6 +7,19 @@ import { db } from '../lib/firebase';
 import { runTransaction, doc, collection, getDoc, setDoc } from 'firebase/firestore';
 import { ERPOrder, ERPProduct, InventoryBatch } from '../types/erp';
 
+// Helper para parsear fechas de lotes de forma defensiva y evitar fallos en el sort
+const getTime = (dateStr: any): number => {
+  if (!dateStr) return 0;
+  if (typeof dateStr.toDate === 'function') {
+    return dateStr.toDate().getTime();
+  }
+  if (typeof dateStr === 'object' && typeof dateStr.seconds === 'number') {
+    return dateStr.seconds * 1000;
+  }
+  const time = new Date(dateStr).getTime();
+  return isNaN(time) ? 0 : time;
+};
+
 /**
  * Procesa una venta aplicando el algoritmo PEPS (Primeras Entradas, Primeras Salidas).
  * Utiliza una transacción atómica de Firestore para garantizar la consistencia en entornos concurrentes.
@@ -50,7 +63,7 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
         let lotesActivos = (productData as any).lotes as InventoryBatch[] || [];
         
         // Ordenamiento Cronológico (FIFO/PEPS): Del más antiguo al más nuevo por fecha_ingreso
-        lotesActivos.sort((a, b) => new Date(a.fecha_ingreso).getTime() - new Date(b.fecha_ingreso).getTime());
+        lotesActivos.sort((a, b) => getTime(a.fecha_ingreso) - getTime(b.fecha_ingreso));
 
         // Validar Stock Real Disponible
         if (productData.stock_disponible < item.cantidad) {

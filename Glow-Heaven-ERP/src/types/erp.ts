@@ -23,6 +23,9 @@ export interface ERPProduct {
   // Propiedades dinámicas - Accesorio
   material?: string;
   color_banio?: string;
+
+  // Lotes vinculados para el motor PEPS
+  lotes?: InventoryBatch[];
 }
 
 export interface InventoryBatch {

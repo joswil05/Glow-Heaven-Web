@@ -4,21 +4,30 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { ERPProduct } from '../types/erp';
-import { createProduct, addInventoryBatch } from '../services/inventoryService';
+import { ERPProduct, InventoryBatch } from '../types/erp';
 import { 
   Package, PlusCircle, Search, AlertCircle, 
-  Layers, CheckCircle2, ChevronRight, Info 
+  Layers, CheckCircle2, Info 
 } from 'lucide-react';
 
 interface InventoryManagementProps {
   products: ERPProduct[];
+  onCreateProduct: (product: ERPProduct) => Promise<void>;
+  onAddInventoryBatch: (sku: string, cantidad: number, costoAdquisicion: number) => Promise<void>;
 }
 
-export const InventoryManagement: React.FC<InventoryManagementProps> = ({ products }) => {
+export const InventoryManagement: React.FC<InventoryManagementProps> = ({ 
+  products,
+  onCreateProduct,
+  onAddInventoryBatch
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFormTab, setActiveFormTab] = useState<'batch' | 'product'>('batch');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- Form Error/Success States (Try/Catch UI feedback) ---
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
   // --- Form 1: New Product State ---
   const [newProduct, setNewProduct] = useState({
@@ -38,37 +47,75 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
   const [batchQtyStr, setBatchQtyStr] = useState('');
   const [batchCostStr, setBatchCostStr] = useState('');
 
+  // Handle Tab Switch & Reset Statuses
+  const handleTabChange = (tab: 'batch' | 'product') => {
+    setActiveFormTab(tab);
+    setFormError(null);
+    setFormSuccess(null);
+  };
+
   // --- Search and Filter ---
   const filteredProducts = useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    return products.filter(p => 
-      p.sku.toLowerCase().includes(term) || 
-      p.nombre.toLowerCase().includes(term) ||
-      p.marca.toLowerCase().includes(term)
-    );
+    const term = (searchTerm || '').toLowerCase().trim();
+    if (!Array.isArray(products)) return [];
+    return products.filter(p => {
+      if (!p) return false;
+      const sku = (p.sku || '').toLowerCase();
+      const nombre = (p.nombre || '').toLowerCase();
+      const marca = (p.marca || '').toLowerCase();
+      return sku.includes(term) || nombre.includes(term) || marca.includes(term);
+    });
   }, [searchTerm, products]);
+
+  // --- Memoized Options for Selector Dropdown ---
+  const productOptions = useMemo(() => {
+    if (!Array.isArray(products)) return [];
+    return products
+      .filter(p => p && p.sku)
+      .map(p => ({
+        sku: p.sku,
+        nombre: p.nombre || ''
+      }));
+  }, [products]);
+
+  // --- Memoized Product Details ---
+  const selectedProductDetails = useMemo(() => {
+    if (!selectedSku || !Array.isArray(products)) return undefined;
+    return products.find(p => p && p.sku === selectedSku);
+  }, [selectedSku, products]);
 
   // Handle New Product Submit
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProduct.sku.trim() || !newProduct.nombre.trim() || !newProduct.marca.trim()) {
-      alert('Por favor, completa los campos obligatorios del producto.');
+    setFormError(null);
+    setFormSuccess(null);
+
+    const skuUpper = newProduct.sku.trim().toUpperCase();
+    if (!skuUpper || !newProduct.nombre.trim() || !newProduct.marca.trim()) {
+      setFormError('Por favor, completa los campos obligatorios del producto (SKU, Nombre y Marca).');
+      return;
+    }
+
+    // Validación de SKU duplicado localmente
+    if (products && products.some(p => p && p.sku && p.sku.toUpperCase() === skuUpper)) {
+      setFormError('El SKU ya existe en el catálogo.');
       return;
     }
 
     try {
       setIsSubmitting(true);
       const productPayload: ERPProduct = {
-        id: newProduct.sku.trim(), // SKU acts as document ID
-        sku: newProduct.sku.trim().toUpperCase(),
+        id: skuUpper, // SKU acts as document ID
+        sku: skuUpper,
         nombre: newProduct.nombre.trim(),
         marca: newProduct.marca.trim(),
         categoria: newProduct.categoria,
         stock_disponible: 0,
         stock_comprometido: 0,
-        stock_minimo: Number(newProduct.stock_minimo),
+        stock_minimo: Number(newProduct.stock_minimo) || 0,
         activo: true,
-        proveedor_id: 'default_prov', // Default value to satisfy types
+        proveedor_id: 'default_prov',
+        lotes: [],
         ...(newProduct.categoria === 'perfume' ? {
           mililitros: newProduct.mililitros,
           concentracion: newProduct.concentracion
@@ -78,8 +125,8 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
         })
       };
 
-      await createProduct(productPayload);
-      alert('Producto creado exitosamente en el catálogo.');
+      await onCreateProduct(productPayload);
+      setFormSuccess(`Producto "${productPayload.nombre}" creado exitosamente en el catálogo.`);
       
       // Reset form
       setNewProduct({
@@ -94,7 +141,8 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
         color_banio: ''
       });
     } catch (error: any) {
-      alert(error.message);
+      console.error('[InventoryManagement] Error al crear producto:', error);
+      setFormError(error.message || 'Error inesperado al crear el producto.');
     } finally {
       setIsSubmitting(false);
     }
@@ -103,40 +151,44 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
   // Handle Ingest Batch Submit
   const handleIngestBatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cantidad = parseInt(batchQtyStr);
-    const costo = parseFloat(batchCostStr);
+    setFormError(null);
+    setFormSuccess(null);
+
+    const cantidad = Number(batchQtyStr);
+    const costo = Number(batchCostStr);
 
     if (!selectedSku) {
-      alert('Por favor, selecciona un producto.');
+      setFormError('Por favor, selecciona un producto.');
       return;
     }
-    if (isNaN(cantidad) || cantidad <= 0) {
-      alert('Ingresa una cantidad de unidades válida mayor a 0.');
+    
+    // Validar cantidad entera mayor a 0
+    if (isNaN(cantidad) || cantidad <= 0 || !Number.isInteger(cantidad)) {
+      setFormError('La cantidad de reabastecimiento debe ser un número entero mayor a 0.');
       return;
     }
+
+    // Validar costo mayor a 0
     if (isNaN(costo) || costo <= 0) {
-      alert('Ingresa un costo de adquisición unitario válido en C$.');
+      setFormError('El costo de adquisición debe ser un número válido mayor a 0 en C$.');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      await addInventoryBatch(selectedSku, cantidad, costo);
-      alert(`Ingreso de lote exitoso. Se añadieron ${cantidad} unidades al stock.`);
+      await onAddInventoryBatch(selectedSku, cantidad, costo);
+      setFormSuccess(`Ingreso de lote exitoso. Se añadieron ${cantidad} unidades al producto "${selectedSku}".`);
       
-      // Reset form
+      // Reset form fields
       setBatchQtyStr('');
       setBatchCostStr('');
     } catch (error: any) {
-      alert(error.message);
+      console.error('[InventoryManagement] Error en reabastecimiento:', error);
+      setFormError(error.message || 'Error inesperado al añadir el lote de inventario.');
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const selectedProductDetails = useMemo(() => {
-    return products.find(p => p.sku === selectedSku);
-  }, [selectedSku, products]);
 
   return (
     <div className="flex-1 flex min-h-0 bg-neutral-100 dark:bg-neutral-950 p-4 gap-4">
@@ -186,9 +238,9 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
               <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
                 {filteredProducts.map(prod => {
                   // Calcular lotes activos (donde cantidad_restante > 0)
-                  const lotesList = (prod as any).lotes || [];
-                  const activeBatchesCount = lotesList.filter((l: any) => l.cantidad_restante > 0).length;
-                  const isUnderStock = prod.stock_disponible <= prod.stock_minimo;
+                  const lotesList = prod.lotes || [];
+                  const activeBatchesCount = lotesList.filter((l: any) => l && l.cantidad_restante > 0).length;
+                  const isUnderStock = (prod.stock_disponible || 0) <= (prod.stock_minimo || 0);
 
                   return (
                     <tr key={prod.sku} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/30 transition-colors">
@@ -215,15 +267,15 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-bold">
                         <div className={`${isUnderStock ? 'text-rose-500' : 'text-neutral-800 dark:text-neutral-200'}`}>
-                          {prod.stock_disponible} u.
+                          {prod.stock_disponible || 0} u.
                         </div>
-                        <div className="text-[9px] text-neutral-400">Mín: {prod.stock_minimo} u.</div>
+                        <div className="text-[9px] text-neutral-400">Mín: {prod.stock_minimo || 0} u.</div>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <button
                           onClick={() => {
                             setSelectedSku(prod.sku);
-                            setActiveFormTab('batch');
+                            handleTabChange('batch');
                           }}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold px-2 py-1.5 rounded-md transition-colors cursor-pointer"
                         >
@@ -245,13 +297,13 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
         {/* Pestañas de Formulario */}
         <div className="flex border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/50 shrink-0">
           <button 
-            onClick={() => setActiveFormTab('batch')}
+            onClick={() => handleTabChange('batch')}
             className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeFormTab === 'batch' ? 'border-b-2 border-emerald-500 text-emerald-600 bg-white dark:bg-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
           >
             Abastecer Lote
           </button>
           <button 
-            onClick={() => setActiveFormTab('product')}
+            onClick={() => handleTabChange('product')}
             className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeFormTab === 'product' ? 'border-b-2 border-emerald-500 text-emerald-600 bg-white dark:bg-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
           >
             Nuevo Producto
@@ -268,16 +320,30 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                 <PlusCircle className="w-4 h-4 text-emerald-600" /> Ingreso de Mercancía
               </h3>
 
+              {formError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-lg flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              {formSuccess && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500 mt-0.5" />
+                  <span>{formSuccess}</span>
+                </div>
+              )}
+
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-400">Producto Destino</label>
                 <select
                   value={selectedSku}
                   onChange={(e) => setSelectedSku(e.target.value)}
                   disabled={isSubmitting}
-                  className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 cursor-pointer"
+                  className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 cursor-pointer text-neutral-900 dark:text-neutral-100"
                 >
                   <option value="">-- Selecciona un Producto --</option>
-                  {products.map(p => (
+                  {productOptions.map(p => (
                     <option key={p.sku} value={p.sku}>
                       [{p.sku}] {p.nombre}
                     </option>
@@ -290,7 +356,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                   <span className="font-bold text-neutral-700 dark:text-neutral-300">Resumen Actual del Producto:</span>
                   <span>Categoría: <span className="uppercase">{selectedProductDetails.categoria}</span></span>
                   <span>Marca: {selectedProductDetails.marca}</span>
-                  <span>Stock Disponible: <span className="font-mono font-bold text-emerald-600">{selectedProductDetails.stock_disponible} u.</span></span>
+                  <span>Stock Disponible: <span className="font-mono font-bold text-emerald-600">{selectedProductDetails.stock_disponible || 0} u.</span></span>
                 </div>
               )}
 
@@ -305,7 +371,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                     value={batchQtyStr}
                     onChange={(e) => setBatchQtyStr(e.target.value)}
                     disabled={isSubmitting}
-                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400"
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                   />
                 </div>
 
@@ -319,7 +385,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                     value={batchCostStr}
                     onChange={(e) => setBatchCostStr(e.target.value)}
                     disabled={isSubmitting}
-                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 font-mono"
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 font-mono text-neutral-900 dark:text-neutral-100"
                   />
                 </div>
               </div>
@@ -327,7 +393,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold uppercase py-3 rounded-lg text-xs tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold uppercase py-3 rounded-lg text-xs tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 cursor-pointer transition-colors"
               >
                 <PlusCircle className="w-4 h-4" /> Registrar Entrada PEPS
               </button>
@@ -341,6 +407,20 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                 <PlusCircle className="w-4 h-4 text-emerald-600" /> Registrar Nuevo Artículo
               </h3>
 
+              {formError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-lg flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              {formSuccess && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500 mt-0.5" />
+                  <span>{formSuccess}</span>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <div className="w-2/5 flex flex-col gap-1.5">
                   <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-400">SKU (Único)</label>
@@ -350,7 +430,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                     value={newProduct.sku}
                     onChange={(e) => setNewProduct(prev => ({ ...prev, sku: e.target.value }))}
                     disabled={isSubmitting}
-                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 font-mono uppercase"
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 font-mono uppercase text-neutral-900 dark:text-neutral-100"
                   />
                 </div>
 
@@ -362,7 +442,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                     value={newProduct.nombre}
                     onChange={(e) => setNewProduct(prev => ({ ...prev, nombre: e.target.value }))}
                     disabled={isSubmitting}
-                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400"
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                   />
                 </div>
               </div>
@@ -376,7 +456,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                     value={newProduct.marca}
                     onChange={(e) => setNewProduct(prev => ({ ...prev, marca: e.target.value }))}
                     disabled={isSubmitting}
-                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400"
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                   />
                 </div>
 
@@ -386,7 +466,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                     value={newProduct.categoria}
                     onChange={(e) => setNewProduct(prev => ({ ...prev, categoria: e.target.value as any }))}
                     disabled={isSubmitting}
-                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 cursor-pointer"
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 cursor-pointer text-neutral-900 dark:text-neutral-100"
                   >
                     <option value="perfume">✨ Perfume</option>
                     <option value="accesorio">👜 Accesorio</option>
@@ -403,7 +483,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                   value={newProduct.stock_minimo}
                   onChange={(e) => setNewProduct(prev => ({ ...prev, stock_minimo: Number(e.target.value) }))}
                   disabled={isSubmitting}
-                  className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400"
+                  className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                 />
               </div>
 
@@ -417,7 +497,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                         value={newProduct.mililitros}
                         onChange={(e) => setNewProduct(prev => ({ ...prev, mililitros: Number(e.target.value) as any }))}
                         disabled={isSubmitting}
-                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400"
+                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                       >
                         <option value="30">30 ml</option>
                         <option value="50">50 ml</option>
@@ -431,7 +511,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                         value={newProduct.concentracion}
                         onChange={(e) => setNewProduct(prev => ({ ...prev, concentracion: e.target.value as any }))}
                         disabled={isSubmitting}
-                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400"
+                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                       >
                         <option value="EDT">EDT (Eau de Toilette)</option>
                         <option value="EDP">EDP (Eau de Parfum)</option>
@@ -451,7 +531,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                         value={newProduct.material}
                         onChange={(e) => setNewProduct(prev => ({ ...prev, material: e.target.value }))}
                         disabled={isSubmitting}
-                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400"
+                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                       />
                     </div>
 
@@ -463,7 +543,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
                         value={newProduct.color_banio}
                         onChange={(e) => setNewProduct(prev => ({ ...prev, color_banio: e.target.value }))}
                         disabled={isSubmitting}
-                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400"
+                        className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                       />
                     </div>
                   </div>
@@ -473,7 +553,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({ produc
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold uppercase py-3 rounded-lg text-xs tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold uppercase py-3 rounded-lg text-xs tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 cursor-pointer transition-colors"
               >
                 <PlusCircle className="w-4 h-4" /> Crear Producto
               </button>
