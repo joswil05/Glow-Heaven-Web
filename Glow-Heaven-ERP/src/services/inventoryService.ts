@@ -122,16 +122,25 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
       productsData.forEach(({ docRef, data, lotes, costoPEPSItem, lotesMutados }, sku) => {
         const cantidadVendida = orderData.items.find(i => i.sku === sku)?.cantidad || 0;
         
+        const nuevoDisponible = Math.round((data.stock_disponible - cantidadVendida) * 100) / 100;
         const updatePayload: any = {
           lotes: lotes, // Lotes actualizados con la deducción PEPS
-          stock_disponible: Math.round((data.stock_disponible - cantidadVendida) * 100) / 100
+          stock_disponible: nuevoDisponible
         };
 
-        // Si la orden viene de la Web, significa que el stock físico ya estaba marcado como "comprometido".
-        // Al facturarlo y entregarlo, se debe limpiar ese stock comprometido.
+        let nuevoComprometido = data.stock_comprometido || 0;
         if (orderData.canal === 'web_whatsapp') {
-          updatePayload.stock_comprometido = Math.max(0, Math.round((data.stock_comprometido - cantidadVendida) * 100) / 100);
+          nuevoComprometido = Math.max(0, Math.round((data.stock_comprometido - cantidadVendida) * 100) / 100);
+          updatePayload.stock_comprometido = nuevoComprometido;
         }
+
+        // Sincronizar el campo stock con la tienda web
+        const currentStockWeb = typeof (data as any).stock === 'number' ? (data as any).stock : data.stock_disponible;
+        const nuevoStock = orderData.canal === 'web_whatsapp'
+          ? Math.max(0, nuevoDisponible - nuevoComprometido)
+          : Math.max(0, currentStockWeb - cantidadVendida);
+
+        updatePayload.stock = nuevoStock;
 
         transaction.update(docRef, updatePayload);
 
@@ -242,11 +251,18 @@ export const cancelWebOrder = async (orderId: string): Promise<void> => {
         
         // Evitamos saldos negativos si la BD fue manipulada manualmente (y redondeamos)
         const nuevoComprometido = Math.max(0, Math.round((data.stock_comprometido - cantidadDevuelta) * 100) / 100);
-        const nuevoDisponible = Math.round((data.stock_disponible + cantidadDevuelta) * 100) / 100;
+        
+        // El stock disponible no cambia, porque nunca se restó físicamente
+        const nuevoDisponible = data.stock_disponible || 0;
+
+        // Devolver el stock a la tienda web
+        const currentStockWeb = typeof (data as any).stock === 'number' ? (data as any).stock : data.stock_disponible;
+        const nuevoStock = Math.round((currentStockWeb + cantidadDevuelta) * 100) / 100;
 
         transaction.update(ref, {
           stock_comprometido: nuevoComprometido,
-          stock_disponible: nuevoDisponible
+          stock_disponible: nuevoDisponible,
+          stock: nuevoStock
         });
       });
 
@@ -284,6 +300,8 @@ export const createProduct = async (product: ERPProduct): Promise<void> => {
       ...product,
       stock_disponible: 0,
       stock_comprometido: 0,
+      stock: 0,
+      activo: product.activo ?? true,
       lotes: []
     });
     console.log(`[ERP] Producto ${product.nombre} (SKU: ${product.sku}) creado exitosamente.`);
@@ -333,10 +351,15 @@ export const addInventoryBatch = async (sku: string, cantidad: number, costoAdqu
       const lotesActuales = (productData as any).lotes as InventoryBatch[] || [];
       lotesActuales.push(nuevoLote);
 
+      const nuevoDisponible = Math.round((productData.stock_disponible + cantidad) * 100) / 100;
+      const comprom = productData.stock_comprometido || 0;
+      const nuevoStock = Math.max(0, nuevoDisponible - comprom);
+
       // A) Actualizar el producto: inyectar el lote en su array y sumar al stock_disponible
       transaction.update(productRef, {
         lotes: lotesActuales,
-        stock_disponible: Math.round((productData.stock_disponible + cantidad) * 100) / 100
+        stock_disponible: nuevoDisponible,
+        stock: nuevoStock
       });
 
       // B) Crear el espejo en la colección independiente 'inventario_lotes'

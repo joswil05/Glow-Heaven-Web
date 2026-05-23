@@ -32,6 +32,8 @@ export interface Product {
   material?: string;
   precio: number;
   stock: number;
+  stock_disponible?: number;
+  stock_comprometido?: number;
   imagenUrl: string;
   activo: boolean;
   descripcion?: string; // Optional nice detail

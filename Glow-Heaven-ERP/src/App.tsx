@@ -9,6 +9,7 @@ import { db } from './lib/firebase'; // Configuración compartida de Firebase
 import { DashboardOverview } from './components/DashboardOverview';
 import { QuickSaleModal } from './components/QuickSaleModal';
 import { InventoryManagement } from './components/InventoryManagement';
+import { CatalogManagement } from './components/CatalogManagement';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from './types/erp';
 import { createProduct, addInventoryBatch, processPEPSSale } from './services/inventoryService';
 
@@ -75,7 +76,7 @@ export default function App() {
   
   // Estado para el modal de Venta Rápida (Atajo F2)
   const [showQuickSale, setShowQuickSale] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'inventory'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'inventory' | 'catalog'>('dashboard');
 
   // 1. DISPARADOR GLOBAL DE TECLADO (Entorno de Escritorio Nacio/Tauri)
   useEffect(() => {
@@ -86,6 +87,11 @@ export default function App() {
       if (e.key === 'F1') {
         e.preventDefault();
         setCurrentView('dashboard');
+      }
+      // F3: Ir al módulo de Catálogo Web
+      if (e.key === 'F3') {
+        e.preventDefault();
+        setCurrentView('catalog');
       }
       // F4: Ir al módulo de Inventario
       if (e.key === 'F4') {
@@ -145,7 +151,67 @@ export default function App() {
     const unsubOrders = onSnapshot(
       collection(db, 'pedidos'), 
       (snap) => {
-        setOrders(snap.docs.map(doc => ({ id_orden: doc.id, ...doc.data() } as ERPOrder)));
+        const parsedOrders = snap.docs.map(doc => {
+          const data = doc.data();
+          
+          // Detectar si la orden viene de la Web (tiene id_pedido, cliente como objeto, o carece de total_cs)
+          if (data.id_pedido || data.cliente || typeof data.total_cs === 'undefined') {
+            const exchangeRate = 36.5;
+            
+            // Mapear items
+            const erpItems = Array.isArray(data.items) ? data.items.map((it: any) => ({
+              sku: it.sku || it.producto_id || '',
+              nombre: it.nombre || '',
+              cantidad: Number(it.cantidad) || 0,
+              precio_cobrado: Number(it.precio_cobrado || (it.precio_unitario ? it.precio_unitario * exchangeRate : 0)) || 0,
+              costo_peps_calculado: Number(it.costo_peps_calculado) || 0
+            })) : [];
+
+            // Mapear método de pago
+            let mappedMetodoPago: 'transferencia' | 'efectivo' = 'transferencia';
+            if (data.metodo_pago) {
+              const mp = String(data.metodo_pago).toLowerCase();
+              if (mp.includes('efectivo')) mappedMetodoPago = 'efectivo';
+            }
+
+            // Mapear estado
+            let mappedEstado: 'pendiente_pago' | 'stock_comprometido' | 'listo_despacho' | 'entregado' | 'cancelado' = 'stock_comprometido';
+            if (data.estado) {
+              const est = String(data.estado);
+              if (est === 'Pendiente de Pago' || est === 'pendiente_pago') {
+                mappedEstado = 'stock_comprometido'; // Pendiente en la web significa comprometido en ERP
+              } else if (est === 'Completado' || est === 'entregado' || est === 'listo_despacho') {
+                mappedEstado = 'listo_despacho';
+              } else if (est === 'Cancelado' || est === 'cancelado') {
+                mappedEstado = 'cancelado';
+              }
+            }
+
+            const totalCs = Number(data.total_cs || (data.total ? data.total * exchangeRate : 0)) || 0;
+
+            return {
+              id_orden: doc.id,
+              canal: 'web_whatsapp',
+              fecha: data.fecha || new Date().toISOString(),
+              cliente_nombre: data.cliente_nombre || (data.cliente && data.cliente.nombre) || 'Cliente Web',
+              cliente_telefono: data.cliente_telefono || (data.cliente && data.cliente.celular) || '',
+              items: erpItems,
+              total_cs: totalCs,
+              metodo_pago: mappedMetodoPago,
+              estado: mappedEstado,
+              costo_peps_total_cs: Number(data.costo_peps_total_cs) || 0,
+              utilidad_bruta_cs: Number(data.utilidad_bruta_cs) || 0,
+              fecha_procesamiento: data.fecha_procesamiento || undefined
+            } as ERPOrder;
+          } else {
+            // Orden nativa del ERP
+            return {
+              id_orden: doc.id,
+              ...data
+            } as ERPOrder;
+          }
+        });
+        setOrders(parsedOrders);
       },
       (error) => {
         console.error('[ERP OS] Error de conexión/permisos en la colección "pedidos":', error);
@@ -204,6 +270,12 @@ export default function App() {
             Dashboard <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F1</kbd>
           </button>
           <button 
+            onClick={() => setCurrentView('catalog')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'catalog' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
+          >
+            Catálogo Web <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F3</kbd>
+          </button>
+          <button 
             onClick={() => setCurrentView('inventory')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'inventory' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
           >
@@ -228,15 +300,26 @@ export default function App() {
             isLoading={isLoading}
             onOpenQuickSale={() => setShowQuickSale(true)}
           />
-        ) : (
+        ) : currentView === 'inventory' ? (
           <ErrorBoundary>
-            {/* Cortocircuito defensivo para asegurar que productos está cargado antes de renderizar */}
+            {/* Cortocorticuito defensivo para asegurar que productos está cargado antes de renderizar */}
             {(products && products.length >= 0) ? (
               <InventoryManagement 
                 products={products}
                 onCreateProduct={createProduct}
                 onAddInventoryBatch={addInventoryBatch}
               />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-neutral-100 dark:bg-neutral-950">
+                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-xs text-neutral-400 font-mono">Cargando catálogo de productos...</p>
+              </div>
+            )}
+          </ErrorBoundary>
+        ) : (
+          <ErrorBoundary>
+            {products ? (
+              <CatalogManagement products={products} />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-neutral-100 dark:bg-neutral-950">
                 <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>

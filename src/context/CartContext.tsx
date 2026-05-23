@@ -205,6 +205,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 item,
                 ref: productRef,
                 currentStock: dbProductData.stock ?? 0,
+                dbProductData
               };
             })
           );
@@ -220,10 +221,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const orderRef = doc(db, 'pedidos', orderId);
           transaction.set(orderRef, newOrder);
 
-          // 4. Update product stocks
+          // 4. Update product stocks (sync with ERP schema)
           for (const p of productDocs) {
             const updatedStock = p.currentStock - p.item.quantity;
-            transaction.update(p.ref, { stock: updatedStock });
+            const currentStockDisponible = p.dbProductData.stock_disponible ?? p.currentStock;
+            const currentStockComprometido = p.dbProductData.stock_comprometido ?? 0;
+
+            transaction.update(p.ref, { 
+              stock: updatedStock,
+              stock_comprometido: currentStockComprometido + p.item.quantity,
+              stock_disponible: currentStockDisponible
+            });
           }
         });
 

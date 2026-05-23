@@ -12,6 +12,7 @@ export interface ERPProduct {
   stock_disponible: number;
   stock_comprometido: number;
   stock_minimo: number;
+  stock?: number; // Sincronizado para tienda web
   activo: boolean;
   proveedor_id: string;
 
@@ -30,6 +31,12 @@ export interface ERPProduct {
   // Precios del catálogo (Firestore)
   precio?: number;
   precio_venta?: number;
+
+  // Propiedades específicas del catálogo web
+  descripcion?: string;
+  genero?: 'Dama' | 'Caballero' | 'Unisex';
+  imagenUrl?: string;
+  notas?: string[];
 }
 
 export interface InventoryBatch {

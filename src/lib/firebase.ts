@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import firebaseAppletConfig from '../../firebase-applet-config.json';
+import firebaseAppletConfig from '../firebase-applet-config.json';
 
 // Define Operation types for Error Handlers
 export enum OperationType {
