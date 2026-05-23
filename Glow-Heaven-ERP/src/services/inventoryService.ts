@@ -222,7 +222,8 @@ export const cancelWebOrder = async (orderId: string): Promise<void> => {
       const orderData = orderSnap.data() as ERPOrder;
 
       // Solo se pueden cancelar pedidos que aún estén reteniendo stock
-      if (orderData.estado !== 'stock_comprometido' && orderData.estado !== 'pendiente_pago') {
+      const orderEstado = String(orderData.estado || '').toLowerCase();
+      if (orderEstado !== 'stock_comprometido' && orderEstado !== 'pendiente_pago' && orderEstado !== 'pendiente de pago') {
         throw new Error(`No se puede cancelar un pedido en estado: ${orderData.estado}`);
       }
 
@@ -247,13 +248,8 @@ export const cancelWebOrder = async (orderId: string): Promise<void> => {
       // 3. Fase de Escritura: Revertir stock y cancelar orden
       productsData.forEach(({ ref, data }, sku) => {
         const cantidadDevuelta = orderData.items.find(i => i.sku === sku)?.cantidad || 0;
-        
-        const isSocialMedia = orderData.envio.canal === 'whatsapp' || orderData.envio.canal === 'instagram';
 
-        const nuevoDisponible = isSocialMedia 
-          ? Math.round(((data.stock_disponible || 0) + cantidadDevuelta) * 100) / 100
-          : data.stock_disponible || 0;
-          
+        const nuevoDisponible = Math.round(((data.stock_disponible || 0) + cantidadDevuelta) * 100) / 100;
         const nuevoComprometido = Math.max(0, Math.round(((data.stock_comprometido || 0) - cantidadDevuelta) * 100) / 100);
 
         // Devolver el stock a la tienda web
