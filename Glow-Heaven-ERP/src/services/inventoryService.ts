@@ -3,8 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { db } from '../lib/firebase';
-import { runTransaction, doc, collection, getDoc, setDoc } from 'firebase/firestore';
+import { db, storage } from '../lib/firebase';
+import { 
+  runTransaction, doc, collection, getDoc, setDoc, 
+  writeBatch, query, where, getDocs 
+} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ERPOrder, ERPProduct, InventoryBatch } from '../types/erp';
 
 // Helper para parsear fechas de lotes de forma defensiva y evitar fallos en el sort
@@ -370,5 +374,65 @@ export const addInventoryBatch = async (sku: string, cantidad: number, costoAdqu
   } catch (error: any) {
     console.error('[ERP] Error en reabastecimiento de inventario:', error.message);
     throw new Error(`No se pudo añadir el lote de inventario. ${error.message}`);
+  }
+};
+
+/**
+ * Elimina un producto de Firestore y todos sus lotes asociados de forma atómica.
+ * 
+ * @param sku SKU del producto a eliminar
+ */
+export const deleteProduct = async (sku: string): Promise<void> => {
+  try {
+    const batch = writeBatch(db);
+    
+    // 1. Eliminar el documento del producto
+    const productRef = doc(db, 'productos', sku);
+    batch.delete(productRef);
+
+    // 2. Buscar y eliminar todos los lotes de reabastecimiento asociados
+    const lotesRef = collection(db, 'inventario_lotes');
+    const q = query(lotesRef, where('producto_id', '==', sku));
+    const querySnapshot = await getDocs(q);
+
+    querySnapshot.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    // 3. Ejecutar el lote de escritura (atomic)
+    await batch.commit();
+    console.log(`[ERP] Producto ${sku} y sus lotes asociados eliminados exitosamente.`);
+  } catch (error: any) {
+    console.error(`[ERP] Error al eliminar producto ${sku}:`, error.message);
+    throw new Error(`No se pudo eliminar el producto de la base de datos. ${error.message}`);
+  }
+};
+
+/**
+ * Sube una imagen local de la PC a Firebase Storage y devuelve su URL de descarga pública.
+ * 
+ * @param sku SKU del producto para nombrar el archivo
+ * @param file Objeto File binario de la imagen
+ * @returns Promesa con la URL de descarga de la imagen
+ */
+export const uploadProductImage = async (sku: string, file: File): Promise<string> => {
+  if (!storage) {
+    throw new Error('El servicio de almacenamiento de Firebase (Storage) no está inicializado.');
+  }
+  try {
+    // Generar un nombre único con timestamp para evitar problemas de caché del navegador
+    const fileName = `${sku}_${Date.now()}.png`;
+    const storageRef = ref(storage, `productos/${fileName}`);
+    
+    // Subir el archivo
+    await uploadBytes(storageRef, file);
+    
+    // Obtener la URL de descarga
+    const downloadUrl = await getDownloadURL(storageRef);
+    console.log(`[ERP] Imagen subida exitosamente para ${sku}. URL: ${downloadUrl}`);
+    return downloadUrl;
+  } catch (error: any) {
+    console.error(`[ERP] Error subiendo imagen para ${sku}:`, error.message);
+    throw new Error(`No se pudo subir la imagen. ${error.message}`);
   }
 };

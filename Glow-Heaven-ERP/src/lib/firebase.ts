@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import firebaseAppletConfig from '../firebase-applet-config.json';
 
 // Define Operation types for Error Handlers
@@ -33,6 +34,7 @@ export interface FirestoreErrorInfo {
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 let auth: Auth | null = null;
+let storage: FirebaseStorage | null = null;
 let firebaseInitialized = false;
 
 try {
@@ -62,6 +64,7 @@ try {
     }
     db = getFirestore(app, firestoreDatabaseId);
     auth = getAuth(app);
+    storage = getStorage(app);
     firebaseInitialized = true;
     console.log("🔥 Firebase initialized successfully. Connected to Firestore Database: " + firestoreDatabaseId);
   }
@@ -69,7 +72,7 @@ try {
   console.error("❌ Critical: Error initializing Firebase SDK", error);
 }
 
-export { app, db, auth, firebaseInitialized };
+export { app, db, auth, storage, firebaseInitialized };
 export const isFirebaseConfigured = () => firebaseInitialized;
 
 // Error handling helper conforming strictly to the FirestoreErrorInfo standard

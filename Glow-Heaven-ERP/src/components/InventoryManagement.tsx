@@ -5,9 +5,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { ERPProduct, InventoryBatch } from '../types/erp';
+import { deleteProduct, uploadProductImage } from '../services/inventoryService';
 import { 
   Package, PlusCircle, Search, AlertCircle, 
-  Layers, CheckCircle2, Info 
+  Layers, CheckCircle2, Info, Trash2, Upload
 } from 'lucide-react';
 
 interface InventoryManagementProps {
@@ -39,7 +40,8 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
     mililitros: 100 as 30 | 50 | 100,
     concentracion: 'EDP' as 'EDT' | 'EDP' | 'Parfum',
     material: '',
-    color_banio: ''
+    color_banio: '',
+    imagenUrl: ''
   });
 
   // --- Form 2: New Batch State ---
@@ -84,6 +86,52 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
     return products.find(p => p && p.sku === selectedSku);
   }, [selectedSku, products]);
 
+  // Handle uploading product image for new product
+  const handleNewProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const sku = newProduct.sku.trim().toUpperCase();
+    if (!file || !sku) return;
+
+    setIsSubmitting(true);
+    setFormError(null);
+    setFormSuccess(null);
+
+    try {
+      setFormSuccess("Subiendo imagen a Firebase Storage...");
+      const url = await uploadProductImage(sku, file);
+      setNewProduct(prev => ({ ...prev, imagenUrl: url }));
+      setFormSuccess("¡Imagen subida con éxito!");
+    } catch (error: any) {
+      console.error('[InventoryManagement] Error al subir imagen de nuevo producto:', error);
+      setFormError(`Error al subir imagen: ${error.message || String(error)}`);
+      setFormSuccess(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle deleting a product
+  const handleDeleteProduct = async (product: ERPProduct) => {
+    if (window.confirm(`⚠️ ¿Estás seguro de que deseas ELIMINAR el producto "${product.nombre}" (${product.sku}) del sistema? Esta acción eliminará el producto del ERP, de la tienda web y borrará de forma permanente todos sus lotes asociados. Esta acción no se puede deshacer.`)) {
+      setIsSubmitting(true);
+      setFormError(null);
+      setFormSuccess(null);
+
+      try {
+        await deleteProduct(product.sku);
+        setFormSuccess(`¡Producto "${product.nombre}" eliminado con éxito!`);
+        if (selectedSku === product.sku) {
+          setSelectedSku('');
+        }
+      } catch (error: any) {
+        console.error('[InventoryManagement] Error al eliminar producto:', error);
+        setFormError(`Error al eliminar el producto: ${error.message || String(error)}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
   // Handle New Product Submit
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,6 +164,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
         activo: true,
         proveedor_id: 'default_prov',
         lotes: [],
+        imagenUrl: newProduct.imagenUrl || '',
         ...(newProduct.categoria === 'perfume' ? {
           mililitros: newProduct.mililitros,
           concentracion: newProduct.concentracion
@@ -138,7 +187,8 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
         mililitros: 100,
         concentracion: 'EDP',
         material: '',
-        color_banio: ''
+        color_banio: '',
+        imagenUrl: ''
       });
     } catch (error: any) {
       console.error('[InventoryManagement] Error al crear producto:', error);
@@ -271,7 +321,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
                         </div>
                         <div className="text-[9px] text-neutral-400">Mín: {prod.stock_minimo || 0} u.</div>
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-4 text-center flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => {
                             setSelectedSku(prod.sku);
@@ -280,6 +330,15 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold px-2 py-1.5 rounded-md transition-colors cursor-pointer"
                         >
                           + Lote
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProduct(prod)}
+                          disabled={isSubmitting}
+                          className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white p-1.5 rounded-md transition-colors cursor-pointer"
+                          title="Eliminar producto"
+                        >
+                          <Trash2 className="w-3 h-3" />
                         </button>
                       </td>
                     </tr>
@@ -485,6 +544,33 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
                   disabled={isSubmitting}
                   className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
                 />
+              </div>
+
+              {/* Upload image from PC */}
+              <div className="flex flex-col gap-1.5 bg-neutral-50 dark:bg-neutral-950 p-3 rounded-lg border border-neutral-200 dark:border-neutral-800">
+                <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-400 flex items-center gap-1">
+                  <Upload className="w-3.5 h-3.5" /> Imagen de Portada (Opcional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className={`flex-1 text-center bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-800 rounded px-3 py-2 cursor-pointer text-xs font-bold transition-all text-neutral-800 dark:text-neutral-200 ${newProduct.sku.trim() ? 'hover:border-emerald-500' : 'opacity-50 cursor-not-allowed'}`}>
+                    {newProduct.imagenUrl ? "✓ Imagen Cargada" : "Subir de PC"}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleNewProductImageUpload} 
+                      className="hidden" 
+                      disabled={isSubmitting || !newProduct.sku.trim()}
+                    />
+                  </label>
+                  {newProduct.imagenUrl && (
+                    <div className="w-8 h-8 rounded border overflow-hidden flex items-center justify-center shrink-0">
+                      <img src={newProduct.imagenUrl} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+                {!newProduct.sku.trim() && (
+                  <span className="text-[9px] text-rose-500 font-medium">Escribe el SKU antes de subir la imagen.</span>
+                )}
               </div>
 
               {/* CAMPOS DINÁMICOS CONDICIONALES */}

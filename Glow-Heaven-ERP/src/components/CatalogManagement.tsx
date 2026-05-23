@@ -7,9 +7,11 @@ import React, { useState, useMemo } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { ERPProduct } from '../types/erp';
+import { deleteProduct, uploadProductImage } from '../services/inventoryService';
 import { 
   Globe, Search, Edit3, Save, CheckCircle2, AlertCircle, 
-  Eye, EyeOff, Image as ImageIcon, Sparkles, Tag, Layers
+  Eye, EyeOff, Image as ImageIcon, Sparkles, Tag, Layers,
+  Trash2, Upload
 } from 'lucide-react';
 
 interface CatalogManagementProps {
@@ -102,6 +104,51 @@ export const CatalogManagement: React.FC<CatalogManagementProps> = ({ products }
       setFormError(`Error al guardar en base de datos: ${error.message || String(error)}`);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Upload image from PC to Firebase Storage
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedSku) return;
+
+    setIsSubmitting(true);
+    setFormError(null);
+    setFormSuccess(null);
+
+    try {
+      setFormSuccess("Subiendo imagen a Firebase Storage...");
+      const url = await uploadProductImage(selectedSku, file);
+      setImagenUrl(url);
+      setFormSuccess("¡Imagen subida y previsualizada con éxito!");
+    } catch (error: any) {
+      console.error('[CatalogManagement] Error al subir imagen:', error);
+      setFormError(`Error al subir imagen: ${error.message || String(error)}`);
+      setFormSuccess(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Delete product permanently
+  const handleDeleteProduct = async () => {
+    if (!selectedSku || !selectedProduct) return;
+    
+    if (window.confirm(`⚠️ ¿Estás seguro de que deseas ELIMINAR el producto "${selectedProduct.nombre}" (${selectedSku}) de forma permanente? Esto eliminará el producto del ERP, de la web pública, y borrará todos los lotes de inventario asociados. Esta acción no se puede deshacer.`)) {
+      setIsSubmitting(true);
+      setFormError(null);
+      setFormSuccess(null);
+      
+      try {
+        await deleteProduct(selectedSku);
+        setSelectedSku(null);
+        setFormSuccess(`¡Producto "${selectedProduct.nombre}" eliminado exitosamente del catálogo!`);
+      } catch (error: any) {
+        console.error('[CatalogManagement] Error eliminando producto:', error);
+        setFormError(`Error al eliminar el producto: ${error.message || String(error)}`);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -219,18 +266,29 @@ export const CatalogManagement: React.FC<CatalogManagementProps> = ({ products }
                 </h3>
                 <p className="text-[10px] text-neutral-400 font-mono mt-0.5">SKU: {selectedProduct.sku} | {selectedProduct.nombre}</p>
               </div>
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <Save className="w-3.5 h-3.5" />
-                )}
-                Guardar Cambios
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  type="button"
+                  onClick={handleDeleteProduct}
+                  disabled={isSubmitting}
+                  className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  Guardar Cambios
+                </button>
+              </div>
             </div>
 
             {/* Notification Area */}
@@ -299,31 +357,54 @@ export const CatalogManagement: React.FC<CatalogManagementProps> = ({ products }
 
               </div>
 
-              {/* 3. URL DE LA IMAGEN DE PORTADA */}
+              {/* 3. IMAGEN DE PORTADA */}
               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-5 rounded-xl space-y-3 shadow-sm">
                 <label className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5" /> URL de Imagen de Portada
+                  <ImageIcon className="w-3.5 h-3.5" /> Imagen de Portada
                 </label>
-                <div className="flex gap-4">
-                  <input 
-                    type="url" 
-                    value={imagenUrl}
-                    onChange={(e) => setImagenUrl(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs font-mono rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    placeholder="https://ejemplo.com/fotos/fragancia.jpg"
-                  />
-                  {imagenUrl && (
-                    <div className="w-12 h-12 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 overflow-hidden flex items-center justify-center shrink-0">
-                      <img 
-                        src={imagenUrl} 
-                        alt="Preview" 
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'https://picsum.photos/seed/fallback/100/100';
-                        }}
+                <div className="space-y-4">
+                  {/* File Upload Zone */}
+                  <div className="flex items-center gap-4">
+                    <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 dark:border-neutral-800 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-lg p-4 cursor-pointer transition-colors bg-neutral-50 dark:bg-neutral-950">
+                      <div className="flex flex-col items-center justify-center text-center">
+                        <Upload className="w-6 h-6 text-neutral-400 mb-1" />
+                        <span className="text-xs font-bold text-neutral-600 dark:text-neutral-300">Subir imagen desde PC</span>
+                        <span className="text-[10px] text-neutral-400 mt-0.5">Formatos soportados: JPG, PNG, WEBP</span>
+                      </div>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleImageUpload} 
+                        className="hidden" 
+                        disabled={isSubmitting}
                       />
-                    </div>
-                  )}
+                    </label>
+                    
+                    {imagenUrl && (
+                      <div className="w-20 h-20 rounded-lg bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 overflow-hidden flex items-center justify-center shrink-0">
+                        <img 
+                          src={imagenUrl} 
+                          alt="Preview" 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://picsum.photos/seed/fallback/100/100';
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Text URL option as fallback */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-neutral-400 block uppercase tracking-wider">O introduce una URL de internet:</span>
+                    <input 
+                      type="url" 
+                      value={imagenUrl}
+                      onChange={(e) => setImagenUrl(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      placeholder="https://ejemplo.com/fotos/fragancia.jpg"
+                    />
+                  </div>
                 </div>
               </div>
 
