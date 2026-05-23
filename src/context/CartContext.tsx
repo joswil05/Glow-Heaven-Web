@@ -23,6 +23,8 @@ interface CartContextProps {
   placeOrder: (clientData: ClientData, paymentMethod: PaymentMethod) => Promise<Order>;
   getWhatsAppRedirectUrl: (order: Order) => string;
   isFirebaseActive: boolean;
+  businessPhone: string;
+  rawBusinessPhone: string;
 }
 
 const CartContext = createContext<CartContextProps | undefined>(undefined);
@@ -34,8 +36,38 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('glow_heaven_cart');
     return saved ? JSON.parse(saved) : [];
   });
+  const [businessPhone, setBusinessPhone] = useState<string>("50581105252");
+  const [rawBusinessPhone, setRawBusinessPhone] = useState<string>("+505 8110 5252");
 
   const isFirebaseActive = isFirebaseConfigured() && db !== null;
+
+  // Listen to business configuration (phone number)
+  useEffect(() => {
+    if (isFirebaseActive) {
+      const unsubConfig = onSnapshot(
+        doc(db, 'configuracion', 'negocio'),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data.telefono_contacto) {
+              setRawBusinessPhone(data.telefono_contacto);
+              const digits = String(data.telefono_contacto).replace(/\D/g, '');
+              setBusinessPhone(digits);
+            }
+          } else {
+            // Seed default config
+            setDoc(doc(db, 'configuracion', 'negocio'), {
+              telefono_contacto: '+505 8110 5252'
+            }).catch(err => console.error("Error seeding config:", err));
+          }
+        },
+        (error) => {
+          console.error("Error reading business config:", error);
+        }
+      );
+      return () => unsubConfig();
+    }
+  }, [isFirebaseActive]);
 
   // Initialize/Listen to products
   useEffect(() => {
@@ -308,7 +340,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const encodedMessage = encodeURIComponent(message);
     
-    return `https://api.whatsapp.com/send?phone=573000000000&text=${encodedMessage}`; 
+    return `https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodedMessage}`; 
   };
 
   return (
@@ -327,6 +359,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         placeOrder,
         getWhatsAppRedirectUrl,
         isFirebaseActive,
+        businessPhone,
+        rawBusinessPhone,
       }}
     >
       {children}

@@ -11,6 +11,7 @@ import { QuickSaleModal } from './components/QuickSaleModal';
 import { InventoryManagement } from './components/InventoryManagement';
 import { CatalogManagement } from './components/CatalogManagement';
 import { PhysicalFulfillment } from './components/PhysicalFulfillment';
+import { SettingsView } from './components/SettingsView';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from './types/erp';
 import { createProduct, addInventoryBatch, processPEPSSale } from './services/inventoryService';
 
@@ -77,7 +78,7 @@ export default function App() {
   
   // Estado para el modal de Venta Rápida (Atajo F2)
   const [showQuickSale, setShowQuickSale] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'inventory' | 'catalog' | 'fulfillment'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'inventory' | 'catalog' | 'fulfillment' | 'settings'>('dashboard');
 
   // 1. DISPARADOR GLOBAL DE TECLADO (Entorno de Escritorio Nacio/Tauri)
   useEffect(() => {
@@ -103,6 +104,11 @@ export default function App() {
       if (e.key === 'F5') {
         e.preventDefault();
         setCurrentView('fulfillment');
+      }
+      // F6: Ir al módulo de Configuraciones
+      if (e.key === 'F6') {
+        e.preventDefault();
+        setCurrentView('settings');
       }
       // F2: Abrir Venta Rápida
       if (e.key === 'F2') {
@@ -301,10 +307,17 @@ export default function App() {
           >
             Fulfillment <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F5</kbd>
           </button>
+          <button 
+            onClick={() => setCurrentView('settings')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'settings' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
+          >
+            Configuración <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F6</kbd>
+          </button>
         </div>
 
         <div className="flex gap-4 text-[10px] font-mono text-neutral-400 uppercase tracking-widest">
           <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F2</kbd> Venta Física</span>
+          <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F6</kbd> Ajustes</span>
           <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">Escape</kbd> Cerrar Modal</span>
         </div>
       </div>
@@ -339,6 +352,10 @@ export default function App() {
         ) : currentView === 'fulfillment' ? (
           <ErrorBoundary>
             <PhysicalFulfillment orders={orders} products={products} />
+          </ErrorBoundary>
+        ) : currentView === 'settings' ? (
+          <ErrorBoundary>
+            <SettingsView />
           </ErrorBoundary>
         ) : (
           <ErrorBoundary>

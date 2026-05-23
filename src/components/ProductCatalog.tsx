@@ -10,7 +10,7 @@ import { Search, SlidersHorizontal, Info, ShoppingBag, Check, Sparkles, MessageC
 import { motion, AnimatePresence } from 'motion/react';
 
 export const ProductCatalog: React.FC = () => {
-  const { products, productsLoading, addToCart } = useCart();
+  const { products, productsLoading, addToCart, businessPhone } = useCart();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'Todos' | 'perfume' | 'accesorio'>('Todos');
   const [selectedGender, setSelectedGender] = useState<Gender | 'Todos'>('Todos');
@@ -423,7 +423,7 @@ export const ProductCatalog: React.FC = () => {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={(e) => e.stopPropagation()}
-                    href={`https://api.whatsapp.com/send?phone=573000000000&text=${encodeURIComponent(
+                    href={`https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(
                       `Hola Glow Heaven! Me gustaría realizar una consulta rápida sobre el producto "${prod.nombre}" de la marca ${prod.marca}. ¿Tienen disponibilidad e información de stock en tiempo real? ¡Muchas gracias!`
                     )}`}
                     target="_blank"
@@ -786,7 +786,7 @@ export const ProductCatalog: React.FC = () => {
                         )}
 
                         <a
-                          href={`https://api.whatsapp.com/send?phone=573000000000&text=${encodeURIComponent(
+                          href={`https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(
                             `Hola Glow Heaven! Estoy comparando el producto "${cp.nombre}" y me interesa comprarlo o recibir asesoramiento. ¿Me comentan la disponibilidad?`
                           )}`}
                           target="_blank"
@@ -1037,7 +1037,7 @@ export const ProductCatalog: React.FC = () => {
                           </button>
                         )}
                         <a
-                          href={`https://api.whatsapp.com/send?phone=573000000000&text=${encodeURIComponent(
+                          href={`https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(
                             `Hola Glow Heaven! Me interesa recibir asesoramiento prioritario para el aroma/accesorio exclusivo "${prod.nombre}". ¿Podrían comentarme más de la disponibilidad?`
                           )}`}
                           target="_blank"

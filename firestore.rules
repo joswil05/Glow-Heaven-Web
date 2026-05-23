@@ -91,5 +91,20 @@ service cloud.firestore {
       allow update: if isValidId(orderId);
       allow delete: if false;
     }
+
+    // 4. Collection 'inventario_lotes'
+    match /inventario_lotes/{batchId} {
+      allow read, write: if true;
+    }
+
+    // 5. Collection 'transacciones_financieras'
+    match /transacciones_financieras/{expenseId} {
+      allow read, write: if true;
+    }
+
+    // 6. Collection 'configuracion'
+    match /configuracion/{configId} {
+      allow read, write: if true;
+    }
   }
 }
