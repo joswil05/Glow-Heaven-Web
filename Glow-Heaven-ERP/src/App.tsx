@@ -8,6 +8,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from './lib/firebase'; // Configuración compartida de Firebase
 import { DashboardOverview } from './components/DashboardOverview';
 import { QuickSaleModal } from './components/QuickSaleModal';
+import { InventoryManagement } from './components/InventoryManagement';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from './types/erp';
 
 export default function App() {
@@ -19,12 +20,23 @@ export default function App() {
   
   // Estado para el modal de Venta Rápida (Atajo F2)
   const [showQuickSale, setShowQuickSale] = useState(false);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'inventory'>('dashboard');
 
   // 1. DISPARADOR GLOBAL DE TECLADO (Entorno de Escritorio Nacio/Tauri)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       
+      // F1: Ir al Dashboard
+      if (e.key === 'F1') {
+        e.preventDefault();
+        setCurrentView('dashboard');
+      }
+      // F4: Ir al módulo de Inventario
+      if (e.key === 'F4') {
+        e.preventDefault();
+        setCurrentView('inventory');
+      }
       // F2: Abrir Venta Rápida
       if (e.key === 'F2') {
         e.preventDefault();
@@ -127,16 +139,45 @@ export default function App() {
         </span>
       </div>
 
+      {/* Barra de Navegación del Sistema ERP */}
+      <div className="h-12 bg-white dark:bg-neutral-900 border-b border-neutral-300 dark:border-neutral-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-20">
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setCurrentView('dashboard')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'dashboard' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
+          >
+            Dashboard <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F1</kbd>
+          </button>
+          <button 
+            onClick={() => setCurrentView('inventory')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'inventory' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
+          >
+            Inventario & Lotes <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F4</kbd>
+          </button>
+        </div>
+
+        <div className="flex gap-4 text-[10px] font-mono text-neutral-400 uppercase tracking-widest">
+          <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F2</kbd> Venta Física</span>
+          <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">Escape</kbd> Cerrar Modal</span>
+        </div>
+      </div>
+
       {/* ÁREA PRINCIPAL DE TRABAJO */}
       <main className="flex-1 relative min-h-0">
-        <DashboardOverview 
-          products={products}
-          batches={batches}
-          orders={orders}
-          expenses={expenses}
-          isLoading={isLoading}
-          onOpenQuickSale={() => setShowQuickSale(true)}
-        />
+        {currentView === 'dashboard' ? (
+          <DashboardOverview 
+            products={products}
+            batches={batches}
+            orders={orders}
+            expenses={expenses}
+            isLoading={isLoading}
+            onOpenQuickSale={() => setShowQuickSale(true)}
+          />
+        ) : (
+          <InventoryManagement 
+            products={products}
+          />
+        )}
 
         {/* MODAL F2: VENTA RÁPIDA SUPERPUESTA */}
         {showQuickSale && (

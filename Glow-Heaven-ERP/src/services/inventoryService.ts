@@ -4,7 +4,7 @@
  */
 
 import { db } from '../lib/firebase';
-import { runTransaction, doc, collection } from 'firebase/firestore';
+import { runTransaction, doc, collection, getDoc, setDoc } from 'firebase/firestore';
 import { ERPOrder, ERPProduct, InventoryBatch } from '../types/erp';
 
 /**
@@ -249,5 +249,90 @@ export const cancelWebOrder = async (orderId: string): Promise<void> => {
   } catch (error: any) {
     console.error(`[ERP] Error cancelando orden ${orderId}:`, error.message);
     throw new Error(`No se pudo cancelar el pedido. ${error.message}`);
+  }
+};
+
+/**
+ * Crea un nuevo producto en la colección 'productos' de Firestore.
+ * Valida que el SKU no esté duplicado.
+ * 
+ * @param product Datos del producto a crear
+ */
+export const createProduct = async (product: ERPProduct): Promise<void> => {
+  try {
+    const productRef = doc(db, 'productos', product.sku);
+    const productSnap = await getDoc(productRef);
+
+    if (productSnap.exists()) {
+      throw new Error(`Ya existe un producto con el SKU ${product.sku}.`);
+    }
+
+    await setDoc(productRef, {
+      ...product,
+      stock_disponible: 0,
+      stock_comprometido: 0,
+      lotes: []
+    });
+    console.log(`[ERP] Producto ${product.nombre} (SKU: ${product.sku}) creado exitosamente.`);
+  } catch (error: any) {
+    console.error('[ERP] Error creando producto:', error.message);
+    throw new Error(`No se pudo crear el producto. ${error.message}`);
+  }
+};
+
+/**
+ * Inyecta un lote de inventario (reabastecimiento) a un producto existente.
+ * Utiliza una transacción para actualizar el producto y la colección 'inventario_lotes' atómicamente.
+ * 
+ * @param sku SKU del producto
+ * @param cantidad Cantidad de unidades entrantes
+ * @param costoAdquisicion Costo unitario en Córdobas (C$)
+ */
+export const addInventoryBatch = async (sku: string, cantidad: number, costoAdquisicion: number): Promise<void> => {
+  try {
+    if (cantidad <= 0 || isNaN(cantidad) || !Number.isInteger(cantidad)) {
+      throw new Error('La cantidad de reabastecimiento debe ser un número entero mayor a 0.');
+    }
+    if (costoAdquisicion <= 0 || isNaN(costoAdquisicion)) {
+      throw new Error('El costo de adquisición debe ser mayor a 0.');
+    }
+
+    await runTransaction(db, async (transaction) => {
+      const productRef = doc(db, 'productos', sku);
+      const productSnap = await transaction.get(productRef);
+
+      if (!productSnap.exists()) {
+        throw new Error(`El producto con SKU ${sku} no existe.`);
+      }
+
+      const productData = productSnap.data() as ERPProduct;
+      const batchRef = doc(collection(db, 'inventario_lotes')); // Auto-genera ID del lote
+
+      const nuevoLote: InventoryBatch = {
+        id_lote: batchRef.id,
+        producto_id: sku,
+        fecha_ingreso: new Date().toISOString(),
+        costo_adquisicion: costoAdquisicion,
+        cantidad_inicial: cantidad,
+        cantidad_restante: cantidad
+      };
+
+      const lotesActuales = (productData as any).lotes as InventoryBatch[] || [];
+      lotesActuales.push(nuevoLote);
+
+      // A) Actualizar el producto: inyectar el lote en su array y sumar al stock_disponible
+      transaction.update(productRef, {
+        lotes: lotesActuales,
+        stock_disponible: Math.round((productData.stock_disponible + cantidad) * 100) / 100
+      });
+
+      // B) Crear el espejo en la colección independiente 'inventario_lotes'
+      transaction.set(batchRef, nuevoLote);
+    });
+
+    console.log(`[ERP] Lote de reabastecimiento añadido exitosamente para el producto ${sku}.`);
+  } catch (error: any) {
+    console.error('[ERP] Error en reabastecimiento de inventario:', error.message);
+    throw new Error(`No se pudo añadir el lote de inventario. ${error.message}`);
   }
 };
