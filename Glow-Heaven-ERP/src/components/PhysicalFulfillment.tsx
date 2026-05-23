@@ -212,7 +212,20 @@ export const PhysicalFulfillment: React.FC<PhysicalFulfillmentProps> = ({
 
                   {/* Delivery Info */}
                   <div className="bg-white dark:bg-neutral-900 border border-neutral-250/50 dark:border-neutral-800/50 rounded-lg p-2.5 text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
-                    <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-neutral-400 shrink-0" /> {order.cliente?.telefono}</p>
+                    <div className="flex justify-between items-center">
+                      <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-neutral-400 shrink-0" /> {order.cliente?.telefono}</p>
+                      <a
+                        href={`https://api.whatsapp.com/send?phone=${String(order.cliente?.telefono || '').replace(/\D/g, '')}&text=${encodeURIComponent(
+                          `Hola ${order.cliente?.nombre || 'Cliente'}! Tu pedido #${order.id_orden.slice(-6)} de Glow Heaven ya está en preparación para ser entregado. ¿Nos podrías confirmar si hay alguna indicación especial para la entrega en tu dirección?`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-350 font-bold flex items-center gap-1 cursor-pointer"
+                        title="Contactar cliente por WhatsApp"
+                      >
+                        <MessageSquare className="w-3 h-3 fill-current" /> Consultar Cliente
+                      </a>
+                    </div>
                     <p className="flex items-start gap-1.5 leading-tight"><MapPin className="w-3.5 h-3.5 text-neutral-400 mt-0.5 shrink-0" /> {order.envio?.direccion}</p>
                     <p className="text-[10px] text-indigo-650 dark:text-indigo-400 font-mono mt-1 uppercase font-bold">
                       Método: {order.metodo_pago === 'efectivo' ? '💵 EFECTIVO' : `💳 TRANSFERENCIA - ${order.envio?.banco_destino?.toUpperCase()}`}
@@ -303,7 +316,20 @@ export const PhysicalFulfillment: React.FC<PhysicalFulfillmentProps> = ({
 
                   {/* Delivery Location & Phone details */}
                   <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-2.5 text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
-                    <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-neutral-400 shrink-0" /> {order.cliente?.telefono}</p>
+                    <div className="flex justify-between items-center">
+                      <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-neutral-400 shrink-0" /> {order.cliente?.telefono}</p>
+                      <a
+                        href={`https://api.whatsapp.com/send?phone=${String(order.cliente?.telefono || '').replace(/\D/g, '')}&text=${encodeURIComponent(
+                          `Hola ${order.cliente?.nombre || 'Cliente'}! Tu pedido #${order.id_orden.slice(-6)} de Glow Heaven ya está en tránsito con el motorizado. ¿Hay alguna indicación adicional para facilitar la entrega?`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-350 font-bold flex items-center gap-1 cursor-pointer"
+                        title="Contactar cliente por WhatsApp"
+                      >
+                        <MessageSquare className="w-3 h-3 fill-current" /> Consultar Cliente
+                      </a>
+                    </div>
                     <p className="flex items-start gap-1.5 leading-tight"><MapPin className="w-3.5 h-3.5 text-neutral-400 mt-0.5 shrink-0" /> {order.envio?.direccion}</p>
                     <p className="text-[10px] text-indigo-650 dark:text-indigo-400 font-mono mt-1 uppercase font-bold">
                       Pago: {order.metodo_pago === 'efectivo' ? '💵 EFECTIVO (COBRAR)' : '💳 TRANSFERENCIA'}

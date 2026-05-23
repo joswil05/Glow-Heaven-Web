@@ -17,6 +17,7 @@ interface DashboardOverviewProps {
   expenses: PettyCashTransaction[];
   isLoading: boolean;
   onOpenQuickSale: () => void;
+  businessConfig: any;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -25,7 +26,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   orders,
   expenses,
   isLoading,
-  onOpenQuickSale
+  onOpenQuickSale,
+  businessConfig
 }) => {
   // --- KPI CALCULATIONS ---
   const ventasBrutas = useMemo(() => {
@@ -243,9 +245,18 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <p className="text-xs text-neutral-400 italic">No hay pedidos pendientes de conciliación.</p>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  {pedidosComprometidos.map(p => (
-                    <div key={p.id_orden} className="border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-xl flex flex-col justify-between shadow-xs">
-                      <div>
+                  {pedidosComprometidos.map(p => {
+                    const cleanPhone = String(p.cliente?.telefono || '').replace(/\D/g, '');
+                    let msg = businessConfig?.mensaje_cobro_wa || 'Hola {nombre}! Gracias por tu pedido en Glow Heaven. Recibimos tu solicitud #{id_orden} por C$ {total}.';
+                    msg = msg.replace('{nombre}', p.cliente?.nombre || 'Cliente')
+                             .replace('{id_orden}', p.id_orden.slice(-6))
+                             .replace('{total}', p.total_cs.toLocaleString('es-NI'))
+                             .replace('{banco}', (p.envio?.banco_destino || 'Banco').toUpperCase());
+                    const waChatUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
+
+                    return (
+                      <div key={p.id_orden} className="border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-xl flex flex-col justify-between shadow-xs">
+                        <div>
                         {/* Header of Card */}
                         <div className="flex justify-between items-center mb-2.5">
                           <span className="text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded">
@@ -292,6 +303,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                       
                       {/* Action buttons */}
                       <div className="mt-2 space-y-2">
+                        {/* Dynamic WhatsApp Chat Link */}
+                        <a
+                          href={waChatUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer text-center"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 fill-white/10" /> Iniciar Chat WhatsApp
+                        </a>
+
                         {/* Copy template button */}
                         <button
                           onClick={() => handleCopyWhatsApp(p)}
@@ -346,7 +367,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

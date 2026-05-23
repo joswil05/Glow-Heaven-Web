@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { db } from './lib/firebase'; // Configuración compartida de Firebase
 import { DashboardOverview } from './components/DashboardOverview';
 import { QuickSaleModal } from './components/QuickSaleModal';
@@ -13,6 +13,7 @@ import { CatalogManagement } from './components/CatalogManagement';
 import { PhysicalFulfillment } from './components/PhysicalFulfillment';
 import { SettingsView } from './components/SettingsView';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from './types/erp';
+import { Settings } from 'lucide-react';
 import { createProduct, addInventoryBatch, processPEPSSale } from './services/inventoryService';
 
 interface ErrorBoundaryProps {
@@ -75,7 +76,21 @@ export default function App() {
   const [orders, setOrders] = useState<ERPOrder[]>([]);
   const [expenses, setExpenses] = useState<PettyCashTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [businessConfig, setBusinessConfig] = useState<any>({
+    nombre_negocio: 'Glow Heaven',
+    telefono_contacto: '+505 8110 5252',
+    tipo_cambio: 36.5,
+    banco_bac: 'BAC Ahorros C$ 361234567',
+    banco_lafise: 'LAFISE Ahorros C$ 100234567',
+    banco_banpro: 'BANPRO Ahorros C$ 800234567',
+    mensaje_cobro_wa: 'Hola {nombre}! Gracias por tu pedido en Glow Heaven. Recibimos tu solicitud #{id_orden} por C$ {total}. ¿Nos podrías enviar el comprobante de pago para proceder con el empaque?'
+  });
   
+  const businessConfigRef = React.useRef(businessConfig);
+  useEffect(() => {
+    businessConfigRef.current = businessConfig;
+  }, [businessConfig]);
+
   // Estado para el modal de Venta Rápida (Atajo F2)
   const [showQuickSale, setShowQuickSale] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'inventory' | 'catalog' | 'fulfillment' | 'settings'>('dashboard');
@@ -140,6 +155,18 @@ export default function App() {
   useEffect(() => {
     console.log('[ERP OS] Inicializando motores de sincronización con Firestore...');
 
+    const unsubConfig = onSnapshot(
+      doc(db, 'configuracion', 'negocio'),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setBusinessConfig(snapshot.data());
+        }
+      },
+      (error) => {
+        console.error('[ERP OS] Error de conexión en configuración:', error);
+      }
+    );
+
     const unsubProducts = onSnapshot(
       collection(db, 'productos'), 
       (snap) => {
@@ -165,7 +192,7 @@ export default function App() {
       (snap) => {
         const parsedOrders = snap.docs.map(doc => {
           const data = doc.data();
-          const exchangeRate = 36.5;
+          const exchangeRate = Number(businessConfigRef.current?.tipo_cambio) || 36.5;
 
           // Parse and unify cliente structure
           const cliente = {
@@ -253,6 +280,7 @@ export default function App() {
 
     return () => {
       console.log('[ERP OS] Apagando sincronización...');
+      unsubConfig();
       unsubProducts();
       unsubBatches();
       unsubOrders();
@@ -305,20 +333,27 @@ export default function App() {
             onClick={() => setCurrentView('fulfillment')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'fulfillment' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
           >
-            Fulfillment <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F5</kbd>
-          </button>
-          <button 
-            onClick={() => setCurrentView('settings')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'settings' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
-          >
-            Configuración <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F6</kbd>
+            Gestión de Pedidos <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F5</kbd>
           </button>
         </div>
 
-        <div className="flex gap-4 text-[10px] font-mono text-neutral-400 uppercase tracking-widest">
-          <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F2</kbd> Venta Física</span>
-          <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F6</kbd> Ajustes</span>
-          <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">Escape</kbd> Cerrar Modal</span>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setCurrentView('settings')}
+            className={`p-2 rounded-lg transition-colors cursor-pointer ${
+              currentView === 'settings' 
+                ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 font-bold' 
+                : 'text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300'
+            }`}
+            title="Ajustes y Configuración (F6)"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <div className="flex gap-4 text-[10px] font-mono text-neutral-400 uppercase tracking-widest">
+            <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F2</kbd> Venta Física</span>
+            <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F6</kbd> Ajustes</span>
+            <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">Escape</kbd> Cerrar Modal</span>
+          </div>
         </div>
       </div>
 
@@ -332,6 +367,7 @@ export default function App() {
             expenses={expenses}
             isLoading={isLoading}
             onOpenQuickSale={() => setShowQuickSale(true)}
+            businessConfig={businessConfig}
           />
         ) : currentView === 'inventory' ? (
           <ErrorBoundary>

@@ -218,7 +218,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       items: orderItems,
       total_cs: cartTotal,
       metodo_pago: paymentMethod === PaymentMethod.EFECTIVO ? 'efectivo' : 'transferencia',
-      estado: 'stock_comprometido',
+      estado: 'pendiente_pago',
     };
 
     if (isFirebaseActive) {
@@ -263,7 +263,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             transaction.update(p.ref, { 
               stock: updatedStock,
               stock_comprometido: currentStockComprometido + p.item.quantity,
-              stock_disponible: currentStockDisponible
+              stock_disponible: currentStockDisponible - p.item.quantity
             });
           }
         });
