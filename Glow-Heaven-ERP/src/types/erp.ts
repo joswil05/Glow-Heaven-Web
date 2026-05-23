@@ -58,14 +58,23 @@ export interface ERPOrderItem {
 
 export interface ERPOrder {
   id_orden: string;
-  canal: 'web_whatsapp' | 'mostrador_fisico';
   fecha: string | Date;
-  cliente_nombre: string;
-  cliente_telefono: string;
+  cliente: {
+    nombre: string;
+    telefono: string;
+  };
+  envio: {
+    direccion: string;
+    canal: 'web_whatsapp' | 'mostrador_fisico' | 'whatsapp' | 'instagram';
+    banco_destino: 'banpro' | 'lafise' | 'bac';
+  };
   items: ERPOrderItem[];
   total_cs: number;
   metodo_pago: 'transferencia' | 'efectivo';
-  estado: 'pendiente_pago' | 'stock_comprometido' | 'listo_despacho' | 'entregado' | 'cancelado';
+  estado: 'pendiente_pago' | 'stock_comprometido' | 'listo_despacho' | 'en_camino' | 'entregado' | 'cancelado';
+  costo_peps_total_cs?: number;
+  utilidad_bruta_cs?: number;
+  fecha_procesamiento?: string;
 }
 
 export interface PettyCashTransaction {

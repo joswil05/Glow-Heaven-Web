@@ -165,27 +165,28 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const orderId = `GH-${Date.now().toString().slice(-6)}-${orderNum}`;
 
     const orderItems: OrderItem[] = cart.map((item) => ({
-      producto_id: item.product.id,
+      sku: item.product.id,
       nombre: item.product.nombre,
       cantidad: item.quantity,
-      precio_unitario: item.product.precio,
+      precio_cobrado: item.product.precio * item.quantity,
     }));
 
-    // Generate expiration time (30 minutes from now)
-    const expirationDate = new Date();
-    expirationDate.setMinutes(expirationDate.getMinutes() + 30);
-
     const newOrder: Order = {
-      id_pedido: orderId,
+      id_orden: orderId,
       fecha: new Date().toISOString(),
-      cliente: clientData,
+      cliente: {
+        nombre: clientData.nombre,
+        telefono: clientData.telefono,
+      },
+      envio: {
+        direccion: clientData.direccion, // We mapped ClientData fields earlier in CheckoutForm
+        canal: 'web_whatsapp',
+        banco_destino: 'banpro',
+      },
       items: orderItems,
-      total: cartTotal,
-      metodo_pago: paymentMethod,
-      estado: OrderStatus.PENDIENTE,
-      expiraEn: isFirebaseActive 
-        ? Timestamp.fromDate(expirationDate)
-        : expirationDate.toISOString(),
+      total_cs: cartTotal,
+      metodo_pago: paymentMethod === PaymentMethod.EFECTIVO ? 'efectivo' : 'transferencia',
+      estado: 'stock_comprometido',
     };
 
     if (isFirebaseActive) {
@@ -237,8 +238,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         console.log("Order written to Firestore with atomic stock updates via Transaction!");
       } catch (error: any) {
-        // ENFORCE SKILL CRITICAL EXCEPTION BINDINGS
-        // Check if it's a customer-facing stock error, if so pass it through, else use firestore handler
         if (error.message && (error.message.includes("¡Agotado!") || error.message.includes("no existe"))) {
           throw error;
         } else {
@@ -287,31 +286,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let message = `*✨ GLOW HEAVEN PERFUMES ✨*\n`;
     message += `*¡Nuevo Pedido Confirmado!* 🛍️\n\n`;
     message += `*Detalles del Pedido:*\n`;
-    message += `📋 *ID del Pedido:* \`${order.id_pedido}\`\n`;
+    message += `📋 *ID del Pedido:* \`${order.id_orden}\`\n`;
     message += `📅 *Fecha:* ${dateStr}\n`;
     message += `💳 *Método de Pago:* ${order.metodo_pago}\n`;
     message += `🚦 *Estado:* 🟡 *${order.estado}*\n\n`;
 
     message += `👤 *Información del Cliente:*\n`;
     message += `• *Nombre:* ${order.cliente.nombre}\n`;
-    message += `• *Celular:* ${order.cliente.celular}\n`;
-    message += `• *Dirección de Entrega:* ${order.cliente.direccion}\n\n`;
+    message += `• *Celular:* ${order.cliente.telefono}\n`;
+    message += `• *Dirección de Entrega:* ${order.envio.direccion}\n\n`;
 
     message += `📦 *Detalle de Artículos:*\n`;
     order.items.forEach((item, index) => {
-      const subtotal = item.cantidad * item.precio_unitario;
+      const subtotal = item.precio_cobrado;
       message += `${index + 1}. *${item.nombre}* \n`;
-      message += `   ${item.cantidad} x $${item.precio_unitario} USD  ➝  *$${subtotal} USD*\n`;
+      message += `   ${item.cantidad} x C$ ${(item.precio_cobrado / item.cantidad).toFixed(0)} NIO  ➝  *C$ ${subtotal} NIO*\n`;
     });
 
-    message += `\n💵 *TOTAL COMPRA: $${order.total} USD*\n\n`;
+    message += `\n💵 *TOTAL COMPRA: C$ ${order.total_cs} NIO*\n\n`;
     message += `🔔 _El pedido ha sido cargado al sistema de Glow Heaven en tiempo real. ¡Muchas gracias por tu compra!_`;
 
     const encodedMessage = encodeURIComponent(message);
     
-    // We target the official API which directs beautifully to either WhatsApp Web or App
     return `https://api.whatsapp.com/send?phone=573000000000&text=${encodedMessage}`; 
-    // Colombia base or dummy phone since it gets overridden easily or prompts user
   };
 
   return (

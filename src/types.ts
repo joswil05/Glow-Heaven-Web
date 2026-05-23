@@ -48,19 +48,32 @@ export interface OrderItem {
 
 export interface ClientData {
   nombre: string;
-  celular: string;
+  telefono: string;
   direccion: string;
 }
 
+export interface EnvioData {
+  direccion: string;
+  canal: 'web_whatsapp' | 'whatsapp' | 'instagram';
+  banco_destino: 'banpro' | 'lafise' | 'bac';
+}
+
+export interface OrderItem {
+  sku: string;
+  nombre: string;
+  cantidad: number;
+  precio_cobrado: number;
+}
+
 export interface Order {
-  id_pedido: string;
-  fecha: string; // ISO string / timestamp
+  id_orden: string;
+  fecha: string; // ISO string
   cliente: ClientData;
+  envio: EnvioData;
   items: OrderItem[];
-  total: number;
-  metodo_pago: PaymentMethod;
-  estado: OrderStatus;
-  expiraEn: any; // Firebase Timestamp or string date for expiration
+  total_cs: number;
+  metodo_pago: 'transferencia' | 'efectivo';
+  estado: 'stock_comprometido' | 'pendiente_pago' | 'listo_despacho' | 'en_camino' | 'entregado' | 'cancelado';
 }
 
 export interface CartItem {

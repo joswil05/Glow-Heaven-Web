@@ -19,7 +19,7 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
   
   const [formData, setFormData] = useState<ClientData>({
     nombre: '',
-    celular: '',
+    telefono: '',
     direccion: '',
   });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.TRANSFERENCIA);
@@ -62,12 +62,12 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
   };
 
   const isNombreSuspicious = isSuspiciousText(formData.nombre);
-  const isCelularSuspicious = isSuspiciousText(formData.celular);
+  const isCelularSuspicious = isSuspiciousText(formData.telefono);
   const isDireccionSuspicious = isSuspiciousText(formData.direccion);
-  const isPhoneInvalid = formData.celular.trim() ? !isValidPhoneNumber(formData.celular) : false;
+  const isPhoneInvalid = formData.telefono.trim() ? !isValidPhoneNumber(formData.telefono) : false;
 
   const isAnyFieldSuspicious = isNombreSuspicious || isCelularSuspicious || isDireccionSuspicious;
-  const isAnyFieldEmpty = !formData.nombre.trim() || !formData.celular.trim() || !formData.direccion.trim();
+  const isAnyFieldEmpty = !formData.nombre.trim() || !formData.telefono.trim() || !formData.direccion.trim();
 
   // Strict boolean validation to block any bot submissions or malformed states
   const isFormInvalid = isAnyFieldEmpty || isAnyFieldSuspicious || isPhoneInvalid || cart.length === 0;
@@ -131,7 +131,7 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
             Pedido <span className="italic">Registrado</span>
           </h2>
           <p className="text-[10px] font-mono tracking-widest text-editorial-black/40 bg-editorial-sand px-3 py-1.5 rounded-sm inline-block font-semibold mb-6">
-            ID DE REGISTRO: {placedOrder.id_pedido}
+            ID DE REGISTRO: {placedOrder.id_orden}
           </p>
 
           {/* SUCCESS SCREEN UX EXPLAINING DE 30 MINUTES RULE AND TRANSFER CONSTRAINTS */}
@@ -229,12 +229,12 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
             </div>
 
             <div>
-              <label htmlFor="celular" className="block text-[10px] font-bold uppercase tracking-widest text-editorial-black/50 font-mono mb-2">Celular de Contacto / WhatsApp</label>
+              <label htmlFor="telefono" className="block text-[10px] font-bold uppercase tracking-widest text-editorial-black/50 font-mono mb-2">Celular de Contacto / WhatsApp</label>
               <input
                 type="tel"
-                id="celular"
-                name="celular"
-                value={formData.celular}
+                id="telefono"
+                name="telefono"
+                value={formData.telefono}
                 onChange={handleInputChange}
                 required
                 placeholder="Ej. +57 300 123 4567"
@@ -242,7 +242,7 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
                   isCelularSuspicious 
                     ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100 bg-rose-500/10'
                     : isPhoneInvalid 
-                      ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100 bg-amber-500/10'
+                      ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100 bg-amber-550/10'
                       : 'border-editorial-card-border focus:border-editorial-black focus:ring-editorial-black/10 hover:border-editorial-black/25'
                 }`}
               />

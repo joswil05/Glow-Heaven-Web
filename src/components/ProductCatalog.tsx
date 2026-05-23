@@ -299,7 +299,7 @@ export const ProductCatalog: React.FC = () => {
 
       {/* Grid Display */}
       {productsLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3.5 sm:gap-x-8 gap-y-8 sm:gap-y-12">
+        <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 sm:gap-x-8 gap-y-10 sm:gap-y-12">
           {Array.from({ length: 8 }).map((_, idx) => (
             <div key={idx} className="flex flex-col animate-pulse border-b border-editorial-black/5 pb-5">
               <div className="aspect-[3/4] bg-editorial-black/5 rounded-xl mb-3.5 relative overflow-hidden">
@@ -329,7 +329,7 @@ export const ProductCatalog: React.FC = () => {
           <p className="text-editorial-black/50 text-xs mt-1.5 max-w-sm mx-auto font-light">Limpia tus filtros o realiza una búsqueda alternativa.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3.5 sm:gap-x-8 gap-y-8 sm:gap-y-12">
+        <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 sm:gap-x-8 gap-y-10 sm:gap-y-12">
           {filteredProducts.map((prod) => {
             const hasStock = prod.stock > 0;
             return (
@@ -351,6 +351,11 @@ export const ProductCatalog: React.FC = () => {
                     alt={prod.nombre}
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-700 opacity-90 group-hover:opacity-100"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = prod.categoria === 'accesorio'
+                        ? 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=600'
+                        : 'https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&q=80&w=600';
+                    }}
                   />
                   
                   {/* Micro-interaction hover details overlay */}
@@ -489,11 +494,14 @@ export const ProductCatalog: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Operational add to bag action row */}
                   <div className="pt-3 mt-3.5 border-t border-editorial-black/10 flex flex-col xs:flex-row xs:items-center justify-between gap-2.5">
                     <div>
                       <span className="text-[8px] sm:text-[9px] text-editorial-black/40 block font-mono uppercase tracking-wider">Inversión</span>
-                      <span className="text-base sm:text-lg font-bold text-editorial-black">${prod.precio} USD</span>
+                      <span className="text-base sm:text-lg font-bold text-editorial-black">
+                        <span>$</span>
+                        <span className="notranslate">{prod.precio || 0}</span>
+                        <span className="text-[10px] text-editorial-black/60 pl-1 font-sans">USD</span>
+                      </span>
                     </div>
 
                     {hasStock ? (

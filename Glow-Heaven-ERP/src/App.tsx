@@ -10,6 +10,7 @@ import { DashboardOverview } from './components/DashboardOverview';
 import { QuickSaleModal } from './components/QuickSaleModal';
 import { InventoryManagement } from './components/InventoryManagement';
 import { CatalogManagement } from './components/CatalogManagement';
+import { PhysicalFulfillment } from './components/PhysicalFulfillment';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from './types/erp';
 import { createProduct, addInventoryBatch, processPEPSSale } from './services/inventoryService';
 
@@ -76,7 +77,7 @@ export default function App() {
   
   // Estado para el modal de Venta Rápida (Atajo F2)
   const [showQuickSale, setShowQuickSale] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'inventory' | 'catalog'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'inventory' | 'catalog' | 'fulfillment'>('dashboard');
 
   // 1. DISPARADOR GLOBAL DE TECLADO (Entorno de Escritorio Nacio/Tauri)
   useEffect(() => {
@@ -98,6 +99,11 @@ export default function App() {
         e.preventDefault();
         setCurrentView('inventory');
       }
+      // F5: Ir al módulo de Fulfillment & Logística
+      if (e.key === 'F5') {
+        e.preventDefault();
+        setCurrentView('fulfillment');
+      }
       // F2: Abrir Venta Rápida
       if (e.key === 'F2') {
         e.preventDefault();
@@ -108,7 +114,7 @@ export default function App() {
         e.preventDefault();
         setShowQuickSale(false);
       }
-      // F5 o Ctrl+R o Ctrl+Shift+R: Prevenir recargas en la app nativa
+      // F5, Ctrl+R o Ctrl+Shift+R: Prevenir recargas en la app nativa
       if (e.key === 'F5' || (e.ctrlKey && key === 'r')) {
         e.preventDefault();
         console.warn('[ERP OS] Recarga de ventana prevenida para asegurar persistencia del estado en escritorio.');
@@ -153,63 +159,71 @@ export default function App() {
       (snap) => {
         const parsedOrders = snap.docs.map(doc => {
           const data = doc.data();
-          
-          // Detectar si la orden viene de la Web (tiene id_pedido, cliente como objeto, o carece de total_cs)
-          if (data.id_pedido || data.cliente || typeof data.total_cs === 'undefined') {
-            const exchangeRate = 36.5;
-            
-            // Mapear items
-            const erpItems = Array.isArray(data.items) ? data.items.map((it: any) => ({
-              sku: it.sku || it.producto_id || '',
-              nombre: it.nombre || '',
-              cantidad: Number(it.cantidad) || 0,
-              precio_cobrado: Number(it.precio_cobrado || (it.precio_unitario ? it.precio_unitario * exchangeRate : 0)) || 0,
-              costo_peps_calculado: Number(it.costo_peps_calculado) || 0
-            })) : [];
+          const exchangeRate = 36.5;
 
-            // Mapear método de pago
-            let mappedMetodoPago: 'transferencia' | 'efectivo' = 'transferencia';
-            if (data.metodo_pago) {
-              const mp = String(data.metodo_pago).toLowerCase();
-              if (mp.includes('efectivo')) mappedMetodoPago = 'efectivo';
-            }
+          // Parse and unify cliente structure
+          const cliente = {
+            nombre: data.cliente?.nombre || data.cliente_nombre || 'Cliente Desconocido',
+            telefono: data.cliente?.telefono || data.cliente?.celular || data.cliente_telefono || ''
+          };
 
-            // Mapear estado
-            let mappedEstado: 'pendiente_pago' | 'stock_comprometido' | 'listo_despacho' | 'entregado' | 'cancelado' = 'stock_comprometido';
-            if (data.estado) {
-              const est = String(data.estado);
-              if (est === 'Pendiente de Pago' || est === 'pendiente_pago') {
-                mappedEstado = 'stock_comprometido'; // Pendiente en la web significa comprometido en ERP
-              } else if (est === 'Completado' || est === 'entregado' || est === 'listo_despacho') {
-                mappedEstado = 'listo_despacho';
-              } else if (est === 'Cancelado' || est === 'cancelado') {
-                mappedEstado = 'cancelado';
-              }
-            }
+          // Parse and unify envio structure
+          const envio = {
+            direccion: data.envio?.direccion || data.cliente_direccion || data.cliente?.direccion || 'Mostrador',
+            canal: data.envio?.canal || data.canal || 'whatsapp',
+            banco_destino: data.envio?.banco_destino || data.banco_destino || 'banpro'
+          };
 
-            const totalCs = Number(data.total_cs || (data.total ? data.total * exchangeRate : 0)) || 0;
+          // Unify items
+          const erpItems = Array.isArray(data.items) ? data.items.map((it: any) => ({
+            sku: it.sku || it.producto_id || '',
+            nombre: it.nombre || '',
+            cantidad: Number(it.cantidad) || 0,
+            precio_cobrado: Number(it.precio_cobrado || (it.precio_unitario ? it.precio_unitario * exchangeRate : 0)) || 0,
+            costo_peps_calculado: Number(it.costo_peps_calculado) || 0
+          })) : [];
 
-            return {
-              id_orden: doc.id,
-              canal: 'web_whatsapp',
-              fecha: data.fecha || new Date().toISOString(),
-              cliente_nombre: data.cliente_nombre || (data.cliente && data.cliente.nombre) || 'Cliente Web',
-              cliente_telefono: data.cliente_telefono || (data.cliente && data.cliente.celular) || '',
-              items: erpItems,
-              total_cs: totalCs,
-              metodo_pago: mappedMetodoPago,
-              estado: mappedEstado,
-              costo_peps_total_cs: Number(data.costo_peps_total_cs) || 0,
-              utilidad_bruta_cs: Number(data.utilidad_bruta_cs) || 0,
-              fecha_procesamiento: data.fecha_procesamiento || undefined
-            } as ERPOrder;
-          } else {
-            // Orden nativa del ERP
-            return {
-              id_orden: doc.id,
-              ...data
-            } as ERPOrder;
+          // Unify payment method
+          let mappedMetodoPago: 'transferencia' | 'efectivo' = 'transferencia';
+          if (data.metodo_pago) {
+            const mp = String(data.metodo_pago).toLowerCase();
+            if (mp.includes('efectivo')) mappedMetodoPago = 'efectivo';
           }
+
+          // Unify state machine flow
+          let mappedEstado: 'pendiente_pago' | 'stock_comprometido' | 'listo_despacho' | 'en_camino' | 'entregado' | 'cancelado' = 'pendiente_pago';
+          if (data.estado) {
+            const est = String(data.estado);
+            if (est === 'Pendiente de Pago' || est === 'pendiente_pago') {
+              mappedEstado = 'pendiente_pago';
+            } else if (est === 'stock_comprometido') {
+              mappedEstado = 'stock_comprometido';
+            } else if (est === 'listo_despacho') {
+              mappedEstado = 'listo_despacho';
+            } else if (est === 'en_camino') {
+              mappedEstado = 'en_camino';
+            } else if (est === 'Completado' || est === 'entregado') {
+              mappedEstado = 'entregado';
+            } else if (est === 'Cancelado' || est === 'cancelado') {
+              mappedEstado = 'cancelado';
+            }
+          }
+
+          const totalCs = Number(data.total_cs || (data.total ? data.total * exchangeRate : 0)) || 0;
+
+          return {
+            id_orden: doc.id,
+            fecha: data.fecha || new Date().toISOString(),
+            cliente,
+            envio,
+            items: erpItems,
+            total_cs: totalCs,
+            metodo_pago: mappedMetodoPago,
+            estado: mappedEstado,
+            costo_peps_total_cs: Number(data.costo_peps_total_cs) || 0,
+            utilidad_bruta_cs: Number(data.utilidad_bruta_cs) || 0,
+            fecha_procesamiento: data.fecha_procesamiento || undefined
+          } as ERPOrder;
         });
         setOrders(parsedOrders);
       },
@@ -281,6 +295,12 @@ export default function App() {
           >
             Inventario & Lotes <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F4</kbd>
           </button>
+          <button 
+            onClick={() => setCurrentView('fulfillment')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${currentView === 'fulfillment' ? 'bg-emerald-600 text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
+          >
+            Fulfillment <kbd className="text-[9px] font-mono border border-current px-1 rounded opacity-75">F5</kbd>
+          </button>
         </div>
 
         <div className="flex gap-4 text-[10px] font-mono text-neutral-400 uppercase tracking-widest">
@@ -316,12 +336,16 @@ export default function App() {
               </div>
             )}
           </ErrorBoundary>
+        ) : currentView === 'fulfillment' ? (
+          <ErrorBoundary>
+            <PhysicalFulfillment orders={orders} products={products} />
+          </ErrorBoundary>
         ) : (
           <ErrorBoundary>
             {products ? (
               <CatalogManagement products={products} />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-neutral-100 dark:bg-neutral-950">
+              <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-neutral-150 dark:bg-neutral-950">
                 <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                 <p className="text-xs text-neutral-400 font-mono">Cargando catálogo de productos...</p>
               </div>
@@ -334,7 +358,6 @@ export default function App() {
           <QuickSaleModal 
             onClose={() => setShowQuickSale(false)} 
             products={products}
-            onProcessPEPSSale={processPEPSSale}
           />
         )}
       </main>

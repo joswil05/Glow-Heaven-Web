@@ -102,26 +102,91 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
     setAiError(null);
     setCustomExplanation(null);
 
-    try {
-      const response = await fetch('/api/gemini/quiz', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: promptText,
-          products: products,
-        }),
-      });
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+    if (!apiKey) {
+      setAiError(
+        'El sommelier de IA requiere una clave de API. Por favor, configura tu VITE_GEMINI_API_KEY en las variables de entorno.'
+      );
+      setIsLoading(false);
+      return;
+    }
 
-      const data = await response.json();
+    try {
+      const catalogString = products
+        .map(
+          (p) =>
+            `ID: ${p.id}\nNombre: ${p.nombre}\nMarca: ${p.marca}\nCategoría: ${p.categoria}\nGénero: ${p.genero}\n` +
+            `${p.categoria === 'perfume' && p.notas ? `Notas/Acordes: ${p.notas.join(', ')}\n` : ''}` +
+            `${p.categoria === 'accesorio' ? `Color: ${p.color || ''}\nMaterial: ${p.material || ''}\n` : ''}` +
+            `Precio: $${p.precio} USD\nStock: ${p.stock}\nDescripción: ${p.descripcion}\n`
+        )
+        .join('\n---\n');
+
+      const systemInstructionText = `Eres "Asistente de Estilo Glow Heaven", experto estilista y sommelier de alta perfumería de nuestra prestigiada boutique de lujo híbrida.
+Ofrecemos Alta Perfumería Francesa y una exclusiva colección de Accesorios finos para Dama (bolsos de mano, carteras, clutches premium).
+
+Tu tarea es analizar la solicitud del usuario (donde puede pedir oler de una manera específica, buscar vestir un look increíble para un evento, querer regalar el obsequio perfecto o complementar su outfit) y recomendar el producto o la DUPLA perfecta de nuestro catálogo.
+
+CATÁLOGO REAL COMPLETAMENTE DISPONIBLE:
+${catalogString}
+
+INSTRUCCIONES DE RECOMENDACIÓN:
+1. Recomienda de forma primordial un ID de producto que exista arriba y devuélvelo en "recommendedProductId".
+2. Si el usuario pide un aroma, recomiéndale un perfume de lujo.
+3. Si el usuario busca complementar un outfit, un vestuario, o quiere el regalo completo definitivo de dama, sugiérele la COMBINACIÓN PERFECTA de un perfume (ej: Sunkissed Pétale) Y un bolso a juego de nuestra colección de Accesorios (ej: Maison Clutch Nappa) en el campo "explanation".
+4. Aunque recomiendes una hermosa combinación en la explicación, de todos modos selecciona el ID de uno de ellos (preferiblemente que tenga stock > 0) para el campo "recommendedProductId" para que el usuario pueda cargarlo directamente al carrito.
+5. Devuelve la explicación (explanation) redactada de un modo extremadamente sofisticado, refinado, poético y acogedor en español, explicando por qué tu elección o dupla de perfume y accesorio elevará su presencia y encanto.`;
+
+      // Hacemos fetch al API oficial de Gemini Developer
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: `Solicitud del usuario: "${promptText}"` }
+                ]
+              }
+            ],
+            systemInstruction: {
+              parts: [
+                { text: systemInstructionText }
+              ]
+            },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: 'OBJECT',
+                properties: {
+                  recommendedProductId: {
+                    type: 'STRING',
+                    description: 'El ID exacto del producto recomendado que existe en el catálogo.'
+                  },
+                  explanation: {
+                    type: 'STRING',
+                    description: 'Explicación elegante y detallada en español de por qué es la fragancia ideal.'
+                  }
+                },
+                required: ['recommendedProductId', 'explanation']
+              }
+            }
+          })
+        }
+      );
+
+      const responseData = await response.json();
 
       if (!response.ok) {
-        if (data.error === 'API_KEY_MISSING') {
-          throw new Error('API_KEY_MISSING');
-        }
-        throw new Error(data.message || 'Error al conectar con la botica inteligente.');
+        throw new Error(responseData.error?.message || 'Error al conectar con el Asistente de Estilo.');
       }
+
+      const textResult = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+      const data = JSON.parse(textResult || '{}');
 
       const matchedProduct = products.find((p) => p.id === data.recommendedProductId);
       if (matchedProduct) {
@@ -136,15 +201,9 @@ export const ScentQuiz: React.FC<ScentQuizProps> = ({ onClose, onScrollToCatalog
       }
     } catch (err: any) {
       console.error(err);
-      if (err.message === 'API_KEY_MISSING') {
-        setAiError(
-          'El sommelier de IA requiere una clave de API. Por favor, configura tu GEMINI_API_KEY en el panel de Secrets de AI Studio.'
-        );
-      } else {
-        setAiError(
-          'No hemos podido contactar al Atelier de IA en este momento. Por favor ingresa tu preferencia nuevamente o utiliza el Quiz Tradicional.'
-        );
-      }
+      setAiError(
+        `No hemos podido contactar al Atelier de IA: ${err.message || String(err)}. Por favor ingresa tu preferencia nuevamente o utiliza el Quiz Tradicional.`
+      );
     } finally {
       setIsLoading(false);
     }

@@ -3,12 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { db, storage } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { 
   runTransaction, doc, collection, getDoc, setDoc, 
   writeBatch, query, where, getDocs 
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ERPOrder, ERPProduct, InventoryBatch } from '../types/erp';
 
 // Helper para parsear fechas de lotes de forma defensiva y evitar fallos en el sort
@@ -69,9 +68,10 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
         // Ordenamiento Cronológico (FIFO/PEPS): Del más antiguo al más nuevo por fecha_ingreso
         lotesActivos.sort((a, b) => getTime(a.fecha_ingreso) - getTime(b.fecha_ingreso));
 
-        // Validar Stock Real Disponible
-        if (productData.stock_disponible < item.cantidad) {
-          throw new Error(`Stock insuficiente para ${productData.nombre}. Solicitado: ${item.cantidad}, Disponible: ${productData.stock_disponible}`);
+        // Validar Stock Real en lotes
+        const totalLotes = lotesActivos.reduce((acc, curr) => acc + (curr.cantidad_restante || 0), 0);
+        if (totalLotes < item.cantidad) {
+          throw new Error(`Stock insuficiente en lotes para ${productData.nombre}. Solicitado: ${item.cantidad}, Disponible en lotes: ${totalLotes}`);
         }
 
         // ----------------------------------------------------------------------
@@ -99,8 +99,7 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
           lotesMutados.push(lote);
         }
 
-        // Medida de seguridad algorítmica: Si después de recorrer los lotes sigue habiendo cantidad pendiente,
-        // significa que el array de lotes está desfasado respecto al 'stock_disponible' general.
+        // Medida de seguridad algorítmica
         if (cantidadPendiente > 0) {
           throw new Error(`Inconsistencia contable en ${productData.nombre}: El stock general marca disponible pero no hay lotes físicos suficientes para respaldar el costo PEPS.`);
         }
@@ -126,24 +125,22 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
       productsData.forEach(({ docRef, data, lotes, costoPEPSItem, lotesMutados }, sku) => {
         const cantidadVendida = orderData.items.find(i => i.sku === sku)?.cantidad || 0;
         
-        const nuevoDisponible = Math.round((data.stock_disponible - cantidadVendida) * 100) / 100;
+        const isSocialMedia = orderData.envio.canal === 'whatsapp' || orderData.envio.canal === 'instagram';
+        
+        const nuevoDisponible = isSocialMedia 
+          ? data.stock_disponible 
+          : Math.round((data.stock_disponible - cantidadVendida) * 100) / 100;
+          
+        const nuevoComprometido = Math.max(0, Math.round(((data.stock_comprometido || 0) - cantidadVendida) * 100) / 100);
+        
         const updatePayload: any = {
           lotes: lotes, // Lotes actualizados con la deducción PEPS
-          stock_disponible: nuevoDisponible
+          stock_disponible: nuevoDisponible,
+          stock_comprometido: nuevoComprometido
         };
 
-        let nuevoComprometido = data.stock_comprometido || 0;
-        if (orderData.canal === 'web_whatsapp') {
-          nuevoComprometido = Math.max(0, Math.round((data.stock_comprometido - cantidadVendida) * 100) / 100);
-          updatePayload.stock_comprometido = nuevoComprometido;
-        }
-
         // Sincronizar el campo stock con la tienda web
-        const currentStockWeb = typeof (data as any).stock === 'number' ? (data as any).stock : data.stock_disponible;
-        const nuevoStock = orderData.canal === 'web_whatsapp'
-          ? Math.max(0, nuevoDisponible - nuevoComprometido)
-          : Math.max(0, currentStockWeb - cantidadVendida);
-
+        const nuevoStock = Math.max(0, Math.round((nuevoDisponible - nuevoComprometido) * 100) / 100);
         updatePayload.stock = nuevoStock;
 
         transaction.update(docRef, updatePayload);
@@ -160,8 +157,6 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
       // 3.2 Crear o actualizar la Orden en la colección 'pedidos'
       const utilidadNetaCalculada = Math.round((orderData.total_cs - costoPEPSTotalOrden) * 100) / 100;
       
-      // Evitar duplicación de pedidos: si el pedido ya existe en Firebase (por ser una orden web),
-      // actualizamos el documento original. Si es nuevo (mostrador), generamos un ID.
       const orderRef = orderData.id_orden 
         ? doc(db, 'pedidos', orderData.id_orden) 
         : doc(collection(db, 'pedidos'));
@@ -169,9 +164,9 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
       const orderDocData = {
         ...orderData,
         id_orden: orderRef.id,
-        // Si es canal web, pasa de "stock_comprometido" a "listo_despacho" al validar pago.
-        // Si es físico de mostrador, se entrega de inmediato.
-        estado: orderData.canal === 'web_whatsapp' ? 'listo_despacho' : 'entregado',
+        // Si es canal web o redes sociales, pasa a listo_despacho al validar pago.
+        // Si es mostrador, se entrega inmediatamente.
+        estado: orderData.envio.canal === 'mostrador_fisico' ? 'entregado' : 'listo_despacho',
         costo_peps_total_cs: costoPEPSTotalOrden,
         utilidad_bruta_cs: utilidadNetaCalculada,
         fecha_procesamiento: new Date().toISOString()
@@ -189,9 +184,9 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
           fecha: new Date().toISOString(),
           monto_cs: orderDocData.total_cs,
           metodo_pago: orderDocData.metodo_pago,
-          descripcion: orderDocData.canal === 'web_whatsapp' 
+          descripcion: orderDocData.envio.canal === 'web_whatsapp' 
             ? `Pago de orden web validado (${orderDocData.items.length} ítems) - Pedido #${orderRef.id.slice(-6)}`
-            : `Venta de mostrador (${orderDocData.items.length} ítems) - Ticket #${orderRef.id.slice(-6)}`,
+            : `Venta digital validada (${orderDocData.items.length} ítems) - Pedido #${orderRef.id.slice(-6)}`,
           categoria: 'ventas_netas'
         };
         transaction.set(transaccionRef, transaccionData);
@@ -253,15 +248,16 @@ export const cancelWebOrder = async (orderId: string): Promise<void> => {
       productsData.forEach(({ ref, data }, sku) => {
         const cantidadDevuelta = orderData.items.find(i => i.sku === sku)?.cantidad || 0;
         
-        // Evitamos saldos negativos si la BD fue manipulada manualmente (y redondeamos)
-        const nuevoComprometido = Math.max(0, Math.round((data.stock_comprometido - cantidadDevuelta) * 100) / 100);
-        
-        // El stock disponible no cambia, porque nunca se restó físicamente
-        const nuevoDisponible = data.stock_disponible || 0;
+        const isSocialMedia = orderData.envio.canal === 'whatsapp' || orderData.envio.canal === 'instagram';
+
+        const nuevoDisponible = isSocialMedia 
+          ? Math.round(((data.stock_disponible || 0) + cantidadDevuelta) * 100) / 100
+          : data.stock_disponible || 0;
+          
+        const nuevoComprometido = Math.max(0, Math.round(((data.stock_comprometido || 0) - cantidadDevuelta) * 100) / 100);
 
         // Devolver el stock a la tienda web
-        const currentStockWeb = typeof (data as any).stock === 'number' ? (data as any).stock : data.stock_disponible;
-        const nuevoStock = Math.round((currentStockWeb + cantidadDevuelta) * 100) / 100;
+        const nuevoStock = Math.max(0, Math.round((nuevoDisponible - nuevoComprometido) * 100) / 100);
 
         transaction.update(ref, {
           stock_comprometido: nuevoComprometido,
@@ -412,30 +408,54 @@ export const deleteProduct = async (idOrSku: string): Promise<void> => {
 };
 
 /**
- * Sube una imagen local de la PC a Firebase Storage y devuelve su URL de descarga pública.
+ * Convierte una imagen local de la PC a un Data URL base64 comprimido.
+ * Redimensiona la imagen a un máximo de 800px para mantener los documentos de Firestore ligeros.
+ * NO requiere Firebase Storage (plan Blaze/pago).
  * 
- * @param sku SKU del producto para nombrar el archivo
+ * @param _sku SKU del producto (para logging)
  * @param file Objeto File binario de la imagen
- * @returns Promesa con la URL de descarga de la imagen
+ * @returns Promesa con el Data URL base64 de la imagen
  */
-export const uploadProductImage = async (sku: string, file: File): Promise<string> => {
-  if (!storage) {
-    throw new Error('El servicio de almacenamiento de Firebase (Storage) no está inicializado.');
-  }
-  try {
-    // Generar un nombre único con timestamp para evitar problemas de caché del navegador
-    const fileName = `${sku}_${Date.now()}.png`;
-    const storageRef = ref(storage, `productos/${fileName}`);
-    
-    // Subir el archivo
-    await uploadBytes(storageRef, file);
-    
-    // Obtener la URL de descarga
-    const downloadUrl = await getDownloadURL(storageRef);
-    console.log(`[ERP] Imagen subida exitosamente para ${sku}. URL: ${downloadUrl}`);
-    return downloadUrl;
-  } catch (error: any) {
-    console.error(`[ERP] Error subiendo imagen para ${sku}:`, error.message);
-    throw new Error(`No se pudo subir la imagen. ${error.message}`);
-  }
+export const uploadProductImage = async (_sku: string, file: File): Promise<string> => {
+  const MAX_DIMENSION = 800;
+  const QUALITY = 0.75; // 75% JPEG quality — buen balance peso/calidad
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo de imagen.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('El archivo seleccionado no es una imagen válida.'));
+      img.onload = () => {
+        try {
+          // Calcular dimensiones proporcionales
+          let { width, height } = img;
+          if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+            const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+
+          // Dibujar en canvas y exportar como JPEG comprimido
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('No se pudo crear el contexto de renderizado del canvas.'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', QUALITY);
+          console.log(`[ERP] Imagen convertida a base64 para ${_sku}. Tamaño: ${Math.round(dataUrl.length / 1024)}KB`);
+          resolve(dataUrl);
+        } catch (err: any) {
+          reject(new Error(`Error procesando la imagen: ${err.message}`));
+        }
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
 };

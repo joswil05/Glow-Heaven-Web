@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from '../types/erp';
 import { 
   TrendingUp, Wallet, Activity, Package, AlertTriangle, 
-  ShoppingCart, RefreshCw, Printer, CheckCircle, PackageOpen, X, Search, XCircle
+  ShoppingCart, RefreshCw, Printer, CheckCircle, PackageOpen, X, Search, XCircle,
+  Copy, Check, MessageCircle
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../lib/firebase';
@@ -72,10 +73,23 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return products.filter(p => p && (p.stock_disponible || 0) <= (p.stock_minimo || 0) && p.activo);
   }, [products]);
 
-  // --- ORDER PIPELINES ---
+  // --- STATE FOR PREMIUM INTERACTION STATES ---
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [confirmingOrder, setConfirmingOrder] = useState<{ id: string; action: 'validar' | 'cancelar' } | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Auto-dismiss notifications
+  useEffect(() => {
+    if (notification) {
+      const t = setTimeout(() => setNotification(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [notification]);
+
+  // --- ORDER PIPELINES (UPDATED FOR BOTH PENDIENTE_PAGO AND STOCK_COMPROMETIDO) ---
   const pedidosComprometidos = useMemo(() => {
     if (!Array.isArray(orders)) return [];
-    return orders.filter(o => o && o.estado === 'stock_comprometido');
+    return orders.filter(o => o && (o.estado === 'stock_comprometido' || o.estado === 'pendiente_pago'));
   }, [orders]);
 
   const pedidosListos = useMemo(() => {
@@ -83,24 +97,45 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return orders.filter(o => o && (o.estado === 'listo_despacho' || o.estado === 'entregado'));
   }, [orders]);
 
-  const handleValidarPago = async (order: ERPOrder) => {
-    if (window.confirm(`¿Confirmar pago y descontar PEPS de la orden ${order.id_orden}?`)) {
-      try {
-        await processPEPSSale(order);
-      } catch (error: any) {
-        alert("Error al validar pago: " + error.message);
-      }
+  // --- CONTROLLER HANDLERS ---
+  const handleExecuteValidar = async (order: ERPOrder) => {
+    setConfirmingOrder(null);
+    try {
+      await processPEPSSale(order);
+      setNotification({ message: `¡Pago validado exitosamente para la orden #${order.id_orden.slice(-6)}!`, type: 'success' });
+    } catch (error: any) {
+      setNotification({ message: `Error al validar pago: ${error.message}`, type: 'error' });
     }
   };
 
-  const handleCancelOrder = async (orderId: string) => {
-    if (window.confirm(`⚠️ ¿Estás seguro de que deseas CANCELAR la orden ${orderId} y liberar el inventario comprometido?`)) {
-      try {
-        await cancelWebOrder(orderId);
-      } catch (error: any) {
-        alert("Error al cancelar la orden: " + error.message);
-      }
+  const handleExecuteCancelar = async (orderId: string) => {
+    setConfirmingOrder(null);
+    try {
+      await cancelWebOrder(orderId);
+      setNotification({ message: `La orden #${orderId.slice(-6)} ha sido cancelada y el stock fue liberado.`, type: 'success' });
+    } catch (error: any) {
+      setNotification({ message: `Error al cancelar la orden: ${error.message}`, type: 'error' });
     }
+  };
+
+  const handleCopyWhatsApp = (order: ERPOrder) => {
+    const nombre = order.cliente?.nombre || (order as any).cliente_nombre || 'Cliente';
+    const banco = (order.envio?.banco_destino || 'banco').toUpperCase();
+    const total = order.total_cs;
+    const direccion = order.envio?.direccion || (order as any).cliente_direccion || (order as any).cliente?.direccion || 'N/A';
+    const itemsText = (order.items || []).map(it => `• ${it.cantidad}x ${it.nombre}`).join('\n');
+    
+    const message = `*✨ GLOW HEAVEN ✨*\n` +
+      `*Confirmación de Pago* ✅\n\n` +
+      `Hola *${nombre}*, tu pago ha sido recibido con éxito en *${banco}*.\n\n` +
+      `📦 *Detalle del Pedido:*\n${itemsText}\n\n` +
+      `💰 *Total:* C$ ${total.toLocaleString('es-NI')}\n` +
+      `🚚 *Dirección:* ${direccion}\n\n` +
+      `Tu pedido está *Listo para Despacho* y pasará a bodega hoy mismo. ¡Muchas gracias por tu preferencia!`;
+
+    navigator.clipboard.writeText(message);
+    setCopiedOrderId(order.id_orden);
+    setTimeout(() => setCopiedOrderId(null), 2000);
   };
 
   if (isLoading) {
@@ -122,7 +157,21 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   }
 
   return (
-    <div className="flex-1 p-4 h-full flex flex-col min-h-0">
+    <div className="flex-1 p-4 h-full flex flex-col min-h-0 relative">
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`fixed bottom-4 right-4 z-50 p-4 rounded-xl shadow-lg border text-sm flex items-center gap-2 animate-in fade-in slide-in-from-bottom-5 duration-300 ${
+          notification.type === 'success' 
+            ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-850 text-emerald-800 dark:text-emerald-400' 
+            : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-850 text-rose-800 dark:text-rose-400'
+        }`}>
+          <div className={notification.type === 'success' ? 'text-emerald-600' : 'text-rose-605'}>
+            {notification.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+          </div>
+          <span>{notification.message}</span>
+          <button onClick={() => setNotification(null)} className="ml-2 font-mono text-xs hover:opacity-75 font-bold">×</button>
+        </div>
+      )}
       
       {/* HEADER & ATTAJOS */}
       <header className="flex justify-between items-center mb-4 px-2 shrink-0">
@@ -189,39 +238,112 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
             {/* ROW 1: Stock Comprometido (Por validar) */}
             <div>
-              <h3 className="text-xs font-bold text-amber-600 dark:text-amber-500 mb-3 border-l-2 border-amber-500 pl-2 uppercase tracking-wide">Pedidos Web: Stock Comprometido</h3>
+              <h3 className="text-xs font-bold text-amber-600 dark:text-amber-500 mb-3 border-l-2 border-amber-500 pl-2 uppercase tracking-wide">Pedidos por Conciliar y Validar Pago</h3>
               {pedidosComprometidos.length === 0 ? (
-                <p className="text-xs text-neutral-400 italic">No hay pedidos pendientes de validación.</p>
+                <p className="text-xs text-neutral-400 italic">No hay pedidos pendientes de conciliación.</p>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {pedidosComprometidos.map(p => (
-                    <div key={p.id_orden} className="border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-3 rounded-lg flex flex-col justify-between">
+                    <div key={p.id_orden} className="border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-xl flex flex-col justify-between shadow-xs">
                       <div>
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded">{p.id_orden}</span>
-                          <span className="text-[10px] uppercase font-bold text-neutral-500">{p.metodo_pago}</span>
+                        {/* Header of Card */}
+                        <div className="flex justify-between items-center mb-2.5">
+                          <span className="text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded">
+                            #{p.id_orden.slice(-6)}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] uppercase font-bold tracking-wider bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 px-1.5 py-0.5 rounded">
+                              {p.envio?.canal === 'web_whatsapp' ? '🌐 WEB' : p.envio?.canal === 'instagram' ? '📸 INSTAGRAM' : '💬 WHATSAPP'}
+                            </span>
+                            <span className="text-[9px] uppercase font-bold tracking-wider bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-mono">
+                              {p.envio?.banco_destino?.toUpperCase() || 'N/A'}
+                            </span>
+                          </div>
                         </div>
-                        <p className="font-bold text-sm">{p.cliente_nombre}</p>
-                        <ul className="text-xs text-neutral-600 dark:text-neutral-400 mt-1 mb-2">
-                          {(p.items || []).map((it, i) => <li key={i}>• {it.cantidad}x {it.nombre}</li>)}
+
+                        {/* Customer Info */}
+                        <div className="mb-2">
+                          <p className="font-black text-sm text-neutral-850 dark:text-white">
+                            {p.cliente?.nombre || (p as any).cliente_nombre || 'Cliente'}
+                          </p>
+                          <p className="text-xs text-neutral-500 font-mono flex items-center gap-1 mt-0.5">
+                            📞 {p.cliente?.telefono || (p as any).cliente_celular || (p as any).cliente?.celular || 'N/A'}
+                          </p>
+                          <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1 italic leading-tight">
+                            📍 {p.envio?.direccion || (p as any).cliente_direccion || (p as any).cliente?.direccion || 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Items */}
+                        <ul className="text-xs text-neutral-600 dark:text-neutral-400 mt-2 mb-3 border-t border-b border-neutral-200/50 dark:border-neutral-800/50 py-1.5 space-y-1">
+                          {(p.items || []).map((it, i) => (
+                            <li key={i} className="flex justify-between font-mono">
+                              <span>• {it.cantidad}x {it.nombre}</span>
+                              <span className="text-neutral-450 text-[10px]">({it.sku})</span>
+                            </li>
+                          ))}
                         </ul>
-                        <p className="text-sm font-mono font-bold text-neutral-800 dark:text-neutral-200">C$ {p.total_cs}</p>
+                        
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Total</span>
+                          <span className="text-sm font-mono font-black text-neutral-800 dark:text-neutral-200">C$ {p.total_cs.toLocaleString('es-NI')}</span>
+                        </div>
                       </div>
                       
-                      <div className="mt-3 flex gap-2">
-                        <button 
-                          onClick={() => handleCancelOrder(p.id_orden)}
-                          className="flex-1 bg-white hover:bg-rose-50 dark:bg-neutral-900 dark:hover:bg-rose-950 border border-rose-200 dark:border-rose-900/50 text-rose-600 text-[10px] uppercase font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                          title="Cancelar Orden y Liberar Stock"
+                      {/* Action buttons */}
+                      <div className="mt-2 space-y-2">
+                        {/* Copy template button */}
+                        <button
+                          onClick={() => handleCopyWhatsApp(p)}
+                          className="w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-850 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-[10px] uppercase font-bold py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
                         >
-                          <XCircle className="w-3.5 h-3.5" /> Cancelar
+                          {copiedOrderId === p.id_orden ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-550 animate-bounce" /> Copiado!
+                            </>
+                          ) : (
+                            <>
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-550" /> Copiar Confirmación WA
+                            </>
+                          )}
                         </button>
-                        <button 
-                          onClick={() => handleValidarPago(p)}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold py-2 rounded flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> Validar (PEPS)
-                        </button>
+
+                        <div className="flex gap-2">
+                          {confirmingOrder?.id === p.id_orden ? (
+                            <>
+                              <button
+                                onClick={() => setConfirmingOrder(null)}
+                                className="flex-1 bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-850 dark:hover:bg-neutral-750 text-neutral-700 dark:text-neutral-300 text-[10px] uppercase font-bold py-2 rounded-lg transition-colors cursor-pointer"
+                              >
+                                Atrás
+                              </button>
+                              <button
+                                onClick={() => confirmingOrder.action === 'validar' ? handleExecuteValidar(p) : handleExecuteCancelar(p.id_orden)}
+                                className={`flex-1 text-[10px] uppercase font-bold py-2 rounded-lg text-white transition-colors cursor-pointer ${
+                                  confirmingOrder.action === 'validar' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+                                }`}
+                              >
+                                ¿Confirmar?
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button 
+                                onClick={() => setConfirmingOrder({ id: p.id_orden, action: 'cancelar' })}
+                                className="flex-1 bg-white hover:bg-rose-50 dark:bg-neutral-900 dark:hover:bg-rose-950 border border-rose-200 dark:border-rose-900/50 text-rose-600 text-[10px] uppercase font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                                title="Cancelar Orden y Liberar Stock"
+                              >
+                                <XCircle className="w-3.5 h-3.5" /> Cancelar
+                              </button>
+                              <button 
+                                onClick={() => setConfirmingOrder({ id: p.id_orden, action: 'validar' })}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> Validar (PEPS)
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -239,9 +361,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   {pedidosListos.slice(0, 10).map(p => (
                     <div key={p.id_orden} className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 rounded-lg flex justify-between items-center shadow-sm">
                       <div>
-                        <span className="text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded">{p.id_orden}</span>
-                        <p className="font-bold text-sm mt-1">{p.cliente_nombre}</p>
-                        <p className="text-[10px] text-neutral-400 mt-0.5">{p.canal === 'web_whatsapp' ? 'Web' : 'Mostrador'} • C$ {p.total_cs}</p>
+                        <span className="text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded">#{p.id_orden.slice(-6)}</span>
+                        <p className="font-bold text-sm mt-1">{p.cliente?.nombre || (p as any).cliente_nombre || 'Cliente'}</p>
+                        <p className="text-[10px] text-neutral-400 mt-0.5">{p.envio?.canal === 'web_whatsapp' ? 'Web' : 'Redes'} • C$ {p.total_cs}</p>
                       </div>
                       <button className="p-2.5 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded-lg text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer" title="Imprimir Remisión">
                         <Printer className="w-5 h-5" />

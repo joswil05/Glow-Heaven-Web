@@ -50,91 +50,166 @@ export const GeminiChatbot: React.FC = () => {
     setInputText('');
     setIsTyping(true);
 
-    try {
-      // Format messages history for the api
-      // Gemini expects system instructions in config, and conversational rolls
-      const messagesPayload = [...messages, userMsg]
-        .filter((m) => m.role !== 'system') // only send user/assistant messages to preserve role-alternation
-        .map((m) => ({
-          role: m.role === 'assistant' ? 'assistant' : 'user',
-          text: m.text,
-        }));
-
-      const response = await fetch('/api/gemini/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: messagesPayload,
-          products: products,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data.error === 'API_KEY_MISSING') {
-          throw new Error('API_KEY_MISSING');
-        }
-        throw new Error(data.message || 'Error en comunicación con el chatbot.');
-      }
-
-      // Add assistant response
-      const assistantMsg: ChatMessage = {
-        id: `m_ast_${Date.now()}`,
-        role: 'assistant',
-        text: data.text,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages((prev) => [...prev, assistantMsg]);
-
-      // Handle server-returned dynamic tool/function call (addToCart)
-      if (data.toolCall && data.toolCall.name === 'addToCart') {
-        const pId = data.toolCall.args?.productId;
-        const targetProduct = products.find((p) => p.id === pId);
-        
-        if (targetProduct) {
-          if (targetProduct.stock > 0) {
-            addToCart(targetProduct);
-            
-            // Append visual feedback message as system log in stream
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `m_sys_${Date.now()}`,
-                role: 'system',
-                text: `🛍️ Se ha añadido "${targetProduct.nombre}" a tu bolsa de compras automáticamente.`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              },
-            ]);
-          } else {
-            // Out of stock warning
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `m_sys_${Date.now()}`,
-                role: 'system',
-                text: `⚠️ He intentado añadir "${targetProduct.nombre}" pero se encuentra temporalmente agotado.`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              },
-            ]);
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error(err);
-      let errorText = 'Lo lamento, he tenido un pequeño inconveniente para analizar tu texto. ¿Podrías reescribirlo?';
-      if (err.message === 'API_KEY_MISSING') {
-        errorText = '⚠️ El servicio de Inteligencia Artificial requiere configurar la clave de API. Por favor, agregue su GEMINI_API_KEY en el panel de Secrets de AI Studio.';
-      }
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+    if (!apiKey) {
       setMessages((prev) => [
         ...prev,
         {
           id: `m_err_${Date.now()}`,
           role: 'assistant',
-          text: errorText,
+          text: '⚠️ El servicio de Inteligencia Artificial requiere configurar la clave de API (VITE_GEMINI_API_KEY).',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+      setIsTyping(false);
+      return;
+    }
+
+    try {
+      // Format messages history for Gemini API
+      // Gemini expects: [ { role: 'user' | 'model', parts: [{ text: string }] } ]
+      const geminiHistory = messages
+        .filter((m) => m.role !== 'system') // system logs are internal
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.text }],
+        }));
+
+      // Append the latest user message
+      geminiHistory.push({
+        role: 'user',
+        parts: [{ text: textToSend }],
+      });
+
+      // Catalog details unifier
+      const catalogString = products
+        .map(
+          (p) =>
+            `ID: ${p.id}\nNombre: ${p.nombre}\nMarca: ${p.marca}\nCategoría: ${p.categoria}\nGénero: ${p.genero}\n` +
+            `${p.categoria === 'perfume' && p.notas ? `Notas/Acordes: ${p.notas.join(', ')}\n` : ''}` +
+            `${p.categoria === 'accesorio' ? `Color: ${p.color || ''}\nMaterial: ${p.material || ''}\n` : ''}` +
+            `Precio: $${p.precio} USD\nStock: ${p.stock}\nDescripción: ${p.descripcion}\n`
+        )
+        .join('\n---\n');
+
+      const systemInstructionText = `Eres "El Asistente Virtual de Glow Heaven", un sommelier y estilista experto en nuestra prestigiosa boutique de lujo híbrida.
+Ahora combinamos Alta Perfumería Francesa con Accesorios exclusivos para Dama (bolsos de mano fine leather, clutches, minimal totes).
+
+Tu objetivo es guiar a los visitantes, responder dudas sobre nuestras fragancias o accesorios (colores, materiales), asesorarles en estilo y vestimenta o recomendaciones de regalos y añadir los productos indicados al carrito con addToCart.
+
+FILOSOFÍA DE LA BOUTIQUE E HÍBRIDO:
+- Glow Heaven destaca por su curaduría artística. Sabor de Grasse y fina marroquinería para damas sofisticadas.
+- El proceso de compra es híbrido y express: El usuario agrega perfumes o bolsos a su bolsa, llena sus datos en el checkout, confirma el pedido y al completarse, se le redirige automáticamente a WhatsApp con su pedido formalizado.
+
+CATÁLOGO REAL DE PRODUCTOS ACTIVOS EN ESTE MOMENTO:
+${catalogString}
+
+REGLAS DE CONDUCTA:
+1. Responde de forma cálida, refinada y profesional en español.
+2. Si el usuario te indica que quiere comprar, agregar, o llevar algún producto (sea un perfume u accesorio) del catálogo, utiliza activamente la herramienta "addToCart" suministrando el ID del producto que desea. Una vez invocada la función, explícale de forma amena que has colocado el producto en su bolsa de compras y que puede verlo abriendo el carrito o yendo directamente al checkout.
+3. Si un producto está de baja o agotado (stock = 0), sugiérele amablemente otra alternativa similar que sí tenga unidades disponibles.
+4. Si pide outfit o regalo ideal para mujer, promueve combinaciones poéticas de perfumes con un bolso de mano a juego.`;
+
+      // Declaramos la herramienta para añadir al carrito
+      const addToCartTool = {
+        functionDeclarations: [
+          {
+            name: 'addToCart',
+            description: 'Añade un perfume o accesorio al carrito de compras del usuario mediante su ID.',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                productId: {
+                  type: 'STRING',
+                  description: 'El ID exacto del producto a añadir (ej: "prod_ambre_eclat", "prod_maison_clutch").',
+                },
+              },
+              required: ['productId'],
+            },
+          }
+        ]
+      };
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: geminiHistory,
+            systemInstruction: {
+              parts: [{ text: systemInstructionText }]
+            },
+            tools: [addToCartTool]
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Error al conectar con el chatbot.');
+      }
+
+      const modelPart = data.candidates?.[0]?.content?.parts?.[0];
+      const botText = modelPart?.text || 'He procesado tu solicitud. ¿En qué más te puedo asistir?';
+
+      // Add assistant response
+      const assistantMsg: ChatMessage = {
+        id: `m_ast_${Date.now()}`,
+        role: 'assistant',
+        text: botText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      // Handle function/tool calls returned by Gemini
+      const functionCalls = modelPart?.functionCalls;
+      if (functionCalls && functionCalls.length > 0) {
+        const call = functionCalls[0];
+        if (call.name === 'addToCart') {
+          const args = call.args as { productId: string };
+          const pId = args?.productId;
+          const targetProduct = products.find((p) => p.id === pId);
+          
+          if (targetProduct) {
+            if (targetProduct.stock > 0) {
+              addToCart(targetProduct);
+              
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `m_sys_${Date.now()}`,
+                  role: 'system',
+                  text: `🛍️ Se ha añadido "${targetProduct.nombre}" a tu bolsa de compras automáticamente.`,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                },
+              ]);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `m_sys_${Date.now()}`,
+                  role: 'system',
+                  text: `⚠️ He intentado añadir "${targetProduct.nombre}" pero se encuentra temporalmente agotado.`,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                },
+              ]);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `m_err_${Date.now()}`,
+          role: 'assistant',
+          text: `Lo lamento, he tenido un inconveniente: ${err.message || String(err)}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);

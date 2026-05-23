@@ -42,17 +42,17 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
   }, [darkMode]);
 
   return (
-    <header className="sticky top-0 bg-editorial-ivory/90 backdrop-blur-md border-b border-editorial-black/10 z-30 px-6 sm:px-10 py-5 flex items-center justify-between">
+    <header className="sticky top-0 bg-editorial-ivory/90 backdrop-blur-md border-b border-editorial-black/10 z-30 px-4 py-3 sm:px-10 sm:py-5 flex items-center justify-between">
       <div 
         onClick={() => setView('main')}
-        className="flex items-center gap-2.5 cursor-pointer group"
+        className="flex items-center gap-2.5 cursor-pointer group shrink-0"
       >
-        <span className="font-serif italic font-bold text-2xl tracking-tight text-editorial-black group-hover:opacity-70 transition-opacity uppercase">
-          Glow <span className="font-sans font-light not-italic text-sm text-editorial-black/60 tracking-widest pl-1">Heaven</span>
+        <span className="font-serif italic font-bold text-lg sm:text-2xl tracking-tight text-editorial-black group-hover:opacity-70 transition-opacity uppercase">
+          Glow <span className="font-sans font-light not-italic text-[10px] sm:text-sm text-editorial-black/60 tracking-widest pl-0.5 sm:pl-1">Heaven</span>
         </span>
       </div>
 
-      <nav className="flex items-center gap-6 sm:gap-8">
+      <nav className="flex items-center gap-3 sm:gap-8">
         <button
           onClick={() => {
             setView('main');
@@ -61,7 +61,7 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
               if (el) el.scrollIntoView({ behavior: 'smooth' });
             }, 100);
           }}
-          className="text-[11px] uppercase tracking-widest font-semibold text-editorial-black/70 hover:text-editorial-black transition-colors cursor-pointer"
+          className="text-[10px] sm:text-[11px] uppercase tracking-widest font-semibold text-editorial-black/70 hover:text-editorial-black transition-colors cursor-pointer"
         >
           Colecciones
         </button>
@@ -77,7 +77,7 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
         {/* Dynamic Atmosphere Toggler Accent */}
         <button
           onClick={() => setDarkMode(!darkMode)}
-          className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest font-semibold text-editorial-black/70 hover:text-editorial-black transition-colors cursor-pointer"
+          className="flex items-center gap-1 text-[10px] sm:text-[11px] uppercase tracking-widest font-semibold text-editorial-black/70 hover:text-editorial-black transition-colors cursor-pointer"
           title="Alternar atmósfera de la web (Marfil / Terciopelo)"
           aria-label="Alternar temática"
         >
@@ -85,7 +85,7 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
             <motion.div 
               initial={{ rotate: -30, scale: 0.9 }} 
               animate={{ rotate: 0, scale: 1 }}
-              className="flex items-center gap-1.5 text-amber-500 hover:text-amber-400"
+              className="flex items-center gap-1 text-amber-500 hover:text-amber-400"
             >
               <Sun className="w-3.5 h-3.5 fill-amber-500/10" />
               <span className="hidden leading-none md:inline text-[9.5px] font-mono font-bold">Marfil</span>
@@ -94,7 +94,7 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
             <motion.div 
               initial={{ rotate: 30, scale: 0.9 }} 
               animate={{ rotate: 0, scale: 1 }}
-              className="flex items-center gap-1.5 text-indigo-500 hover:text-indigo-600"
+              className="flex items-center gap-1 text-indigo-500 hover:text-indigo-600"
             >
               <Moon className="w-3.5 h-3.5 fill-indigo-500/10" />
               <span className="hidden leading-none md:inline text-[9.5px] font-mono font-bold">Terciopelo</span>
@@ -104,11 +104,11 @@ function Header({ onOpenCart, onStartQuiz, view, setView }: {
 
         <button
           onClick={onOpenCart}
-          className="relative px-3.5 py-1.5 border border-editorial-black border-dashed hover:border-solid hover:bg-editorial-black hover:text-editorial-ivory text-editorial-black text-[11px] tracking-widest font-black uppercase transition-all cursor-pointer flex items-center gap-2"
+          className="relative px-2 py-1 sm:px-3.5 sm:py-1.5 border border-editorial-black border-dashed hover:border-solid hover:bg-editorial-black hover:text-editorial-ivory text-editorial-black text-[9px] sm:text-[11px] tracking-widest font-black uppercase transition-all cursor-pointer flex items-center gap-1.5"
           id="cart-trigger-btn"
         >
           Bolsa
-          <span className="font-mono text-[9px] font-bold">({cartCount.toString().padStart(2, '0')})</span>
+          <span className="font-mono text-[8px] sm:text-[9px] font-bold">({cartCount.toString().padStart(2, '0')})</span>
         </button>
       </nav>
     </header>

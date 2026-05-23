@@ -87,9 +87,18 @@ export const CatalogManagement: React.FC<CatalogManagementProps> = ({ products }
     try {
       const productRef = doc(db, 'productos', selectedSku);
       
-      const updateData = {
-        activo,
+      // Las reglas de Firestore exigen que el update contenga id, nombre, marca, precio y stock.
+      // Incluimos todos los campos obligatorios del producto original + los cambios del catálogo.
+      const updateData: Record<string, any> = {
+        // Campos obligatorios exigidos por las reglas de seguridad
+        id: selectedProduct.id || selectedSku,
+        nombre: selectedProduct.nombre,
+        marca: selectedProduct.marca,
+        categoria: selectedProduct.categoria,
         precio: Number(precio) || 0,
+        stock: typeof selectedProduct.stock === 'number' ? selectedProduct.stock : (selectedProduct.stock_disponible || 0),
+        // Campos de catálogo web editables
+        activo,
         imagenUrl: imagenUrl.trim(),
         descripcion: descripcion.trim(),
         genero,
