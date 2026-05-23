@@ -387,7 +387,7 @@ export default function App() {
           </ErrorBoundary>
         ) : currentView === 'fulfillment' ? (
           <ErrorBoundary>
-            <PhysicalFulfillment orders={orders} products={products} />
+            <PhysicalFulfillment orders={orders} products={products} businessConfig={businessConfig} />
           </ErrorBoundary>
         ) : currentView === 'settings' ? (
           <ErrorBoundary>

@@ -6,7 +6,7 @@
 import { db } from '../lib/firebase';
 import { 
   runTransaction, doc, collection, getDoc, setDoc, 
-  writeBatch, query, where, getDocs 
+  writeBatch, query, where, getDocs, updateDoc
 } from 'firebase/firestore';
 import { ERPOrder, ERPProduct, InventoryBatch } from '../types/erp';
 
@@ -209,6 +209,9 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
  * @param orderId ID de la orden a cancelar
  */
 export const cancelWebOrder = async (orderId: string): Promise<void> => {
+  if (!orderId) {
+    throw new Error("El ID de la orden no puede estar vacío.");
+  }
   try {
     await runTransaction(db, async (transaction) => {
       // 1. Leer el pedido
@@ -227,11 +230,21 @@ export const cancelWebOrder = async (orderId: string): Promise<void> => {
         throw new Error(`No se puede cancelar un pedido en estado: ${orderData.estado}`);
       }
 
+      // Sanitizar/Unificar items defensivamente para evitar SKU undefined o vacío
+      const items = Array.isArray(orderData.items) ? orderData.items : [];
+      const unifiedItems = items.map((it: any) => {
+        const skuStr = String(it.sku || it.producto_id || '').trim();
+        return {
+          sku: skuStr,
+          cantidad: Number(it.cantidad) || 0
+        };
+      }).filter(it => it.sku !== '');
+
       // 2. Leer todos los productos involucrados (Fase de lectura)
       const productsData = new Map<string, { ref: any, data: ERPProduct }>();
       
       // Medida Anti-Deadlock: Ordenar los SKU al leer
-      const sortedItems = [...orderData.items].sort((a, b) => a.sku.localeCompare(b.sku));
+      const sortedItems = [...unifiedItems].sort((a, b) => a.sku.localeCompare(b.sku));
 
       for (const item of sortedItems) {
         const productRef = doc(db, 'productos', item.sku);
@@ -247,7 +260,8 @@ export const cancelWebOrder = async (orderId: string): Promise<void> => {
 
       // 3. Fase de Escritura: Revertir stock y cancelar orden
       productsData.forEach(({ ref, data }, sku) => {
-        const cantidadDevuelta = orderData.items.find(i => i.sku === sku)?.cantidad || 0;
+        const itemMatch = unifiedItems.find(i => i.sku === sku);
+        const cantidadDevuelta = itemMatch ? itemMatch.cantidad : 0;
 
         const nuevoDisponible = Math.round(((data.stock_disponible || 0) + cantidadDevuelta) * 100) / 100;
         const nuevoComprometido = Math.max(0, Math.round(((data.stock_comprometido || 0) - cantidadDevuelta) * 100) / 100);
@@ -454,4 +468,21 @@ export const uploadProductImage = async (_sku: string, file: File): Promise<stri
     };
     reader.readAsDataURL(file);
   });
+};
+
+/**
+ * Actualiza las propiedades de un producto existente en Firestore.
+ * 
+ * @param sku SKU del producto a editar
+ * @param productData Campos a actualizar
+ */
+export const updateProduct = async (sku: string, productData: Partial<ERPProduct>): Promise<void> => {
+  try {
+    const productRef = doc(db, 'productos', sku);
+    await updateDoc(productRef, productData);
+    console.log(`[ERP] Producto ${sku} actualizado exitosamente.`);
+  } catch (error: any) {
+    console.error('[ERP] Error actualizando producto:', error.message);
+    throw new Error(`No se pudo actualizar el producto. ${error.message}`);
+  }
 };

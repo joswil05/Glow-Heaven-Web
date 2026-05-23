@@ -5,10 +5,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { ERPProduct, InventoryBatch } from '../types/erp';
-import { deleteProduct, uploadProductImage } from '../services/inventoryService';
+import { deleteProduct, uploadProductImage, updateProduct } from '../services/inventoryService';
 import { 
   Package, PlusCircle, Search, AlertCircle, 
-  Layers, CheckCircle2, Info, Trash2, Upload
+  Layers, CheckCircle2, Info, Trash2, Upload, Edit3, X
 } from 'lucide-react';
 
 interface InventoryManagementProps {
@@ -48,6 +48,110 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
   const [selectedSku, setSelectedSku] = useState('');
   const [batchQtyStr, setBatchQtyStr] = useState('');
   const [batchCostStr, setBatchCostStr] = useState('');
+
+  // --- Form 3: Edit Product State ---
+  const [editingProduct, setEditingProduct] = useState<ERPProduct | null>(null);
+  const [editForm, setEditForm] = useState({
+    nombre: '',
+    marca: '',
+    categoria: 'perfume' as 'perfume' | 'accesorio',
+    stock_minimo: 5,
+    precio: 0,
+    mililitros: 100 as 30 | 50 | 100,
+    concentracion: 'EDP' as 'EDT' | 'EDP' | 'Parfum',
+    material: '',
+    color_banio: '',
+    imagenUrl: ''
+  });
+
+  const handleOpenEditModal = (product: ERPProduct) => {
+    setEditingProduct(product);
+    setEditForm({
+      nombre: product.nombre || '',
+      marca: product.marca || '',
+      categoria: product.categoria || 'perfume',
+      stock_minimo: product.stock_minimo || 0,
+      precio: product.precio || 0,
+      mililitros: product.mililitros || 100,
+      concentracion: product.concentracion || 'EDP',
+      material: product.material || '',
+      color_banio: product.color_banio || '',
+      imagenUrl: product.imagenUrl || ''
+    });
+    setFormError(null);
+    setFormSuccess(null);
+  };
+
+  const handleEditProductImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingProduct) return;
+
+    setIsSubmitting(true);
+    setFormError(null);
+    setFormSuccess(null);
+
+    try {
+      setFormSuccess("Subiendo imagen...");
+      const url = await uploadProductImage(editingProduct.sku, file);
+      setEditForm(prev => ({ ...prev, imagenUrl: url }));
+      setFormSuccess("¡Imagen subida con éxito!");
+    } catch (error: any) {
+      console.error('[InventoryManagement] Error al subir imagen de edición:', error);
+      setFormError(`Error al subir imagen: ${error.message || String(error)}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveProductEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    setFormError(null);
+    setFormSuccess(null);
+
+    if (!editForm.nombre.trim() || !editForm.marca.trim()) {
+      setFormError('Por favor, completa los campos obligatorios (Nombre y Marca).');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const updatePayload: Record<string, any> = {
+        id: editingProduct.id || editingProduct.sku,
+        nombre: editForm.nombre.trim(),
+        marca: editForm.marca.trim(),
+        categoria: editForm.categoria,
+        stock_minimo: Number(editForm.stock_minimo) || 0,
+        precio: Number(editForm.precio) || 0,
+        stock: typeof editingProduct.stock === 'number' ? editingProduct.stock : (editingProduct.stock_disponible || 0),
+        imagenUrl: editForm.imagenUrl || '',
+        ...(editForm.categoria === 'perfume' ? {
+          mililitros: editForm.mililitros,
+          concentracion: editForm.concentracion,
+          material: null,
+          color_banio: null
+        } : {
+          material: editForm.material.trim(),
+          color_banio: editForm.color_banio.trim(),
+          mililitros: null,
+          concentracion: null
+        })
+      };
+
+      await updateProduct(editingProduct.sku, updatePayload);
+      setFormSuccess(`¡Producto "${editForm.nombre}" actualizado exitosamente!`);
+      setTimeout(() => {
+        setEditingProduct(null);
+        setFormSuccess(null);
+      }, 1500);
+    } catch (error: any) {
+      console.error('[InventoryManagement] Error al guardar edición:', error);
+      setFormError(error.message || 'Error inesperado al actualizar el producto.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Handle Tab Switch & Reset Statuses
   const handleTabChange = (tab: 'batch' | 'product') => {
@@ -331,6 +435,15 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold px-2 py-1.5 rounded-md transition-colors cursor-pointer"
                         >
                           + Lote
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(prod)}
+                          disabled={isSubmitting}
+                          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white p-1.5 rounded-md transition-colors cursor-pointer"
+                          title="Editar producto"
+                        >
+                          <Edit3 className="w-3 h-3" />
                         </button>
                         <button
                           type="button"
@@ -655,6 +768,199 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 3. MODAL DE EDICIÓN DE PRODUCTO */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-md w-full shadow-2xl flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/40 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-bold text-sm text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-emerald-500" /> Editar Ficha de Producto
+                </h3>
+                <p className="text-[10px] text-neutral-400 font-mono mt-0.5">SKU: {editingProduct.sku}</p>
+              </div>
+              <button 
+                onClick={() => setEditingProduct(null)}
+                className="text-neutral-450 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleSaveProductEdit} className="p-5 flex-1 overflow-y-auto space-y-4 max-h-[75vh]">
+              {formError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-lg flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              {formSuccess && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500 mt-0.5" />
+                  <span>{formSuccess}</span>
+                </div>
+              )}
+
+              {/* Nombre */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-450">Nombre</label>
+                <input 
+                  type="text"
+                  value={editForm.nombre}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, nombre: e.target.value }))}
+                  className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-950 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
+                  required
+                />
+              </div>
+
+              {/* Marca y Categoría */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-450">Marca</label>
+                  <input 
+                    type="text"
+                    value={editForm.marca}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, marca: e.target.value }))}
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-955 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-450">Categoría</label>
+                  <select
+                    value={editForm.categoria}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, categoria: e.target.value as any }))}
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-955 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100 cursor-pointer"
+                  >
+                    <option value="perfume">✨ Perfume</option>
+                    <option value="accesorio">👜 Accesorio</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Stock Mínimo y Precio Web */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-455">Stock Mínimo</label>
+                  <input 
+                    type="number"
+                    min="0"
+                    value={editForm.stock_minimo}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, stock_minimo: Number(e.target.value) }))}
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-955 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-455">Precio Web (USD)</label>
+                  <input 
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editForm.precio}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, precio: Number(e.target.value) }))}
+                    className="w-full text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-neutral-955 focus:outline-none focus:border-neutral-400 font-mono text-neutral-900 dark:text-neutral-100"
+                  />
+                </div>
+              </div>
+
+              {/* Condicionales por Categoría */}
+              {editForm.categoria === 'perfume' ? (
+                <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-500">Mililitros</label>
+                    <select
+                      value={editForm.mililitros}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, mililitros: Number(e.target.value) as any }))}
+                      className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100 cursor-pointer"
+                    >
+                      <option value="30">30 ml</option>
+                      <option value="50">50 ml</option>
+                      <option value="100">100 ml</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-500">Concentración</label>
+                    <select
+                      value={editForm.concentracion}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, concentracion: e.target.value as any }))}
+                      className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100 cursor-pointer"
+                    >
+                      <option value="EDT">EDT</option>
+                      <option value="EDP">EDP</option>
+                      <option value="Parfum">Parfum</option>
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 p-3 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-500">Material</label>
+                    <input 
+                      type="text"
+                      value={editForm.material}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, material: e.target.value }))}
+                      className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
+                      placeholder="Ej: Acero Inoxidable"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-500">Color / Baño</label>
+                    <input 
+                      type="text"
+                      value={editForm.color_banio}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, color_banio: e.target.value }))}
+                      className="w-full text-xs px-2 py-1.5 border border-neutral-200 dark:border-neutral-800 rounded bg-white dark:bg-neutral-900 focus:outline-none focus:border-neutral-400 text-neutral-900 dark:text-neutral-100"
+                      placeholder="Ej: Bañado en Oro"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Imagen */}
+              <div className="flex flex-col gap-1.5 bg-neutral-50 dark:bg-neutral-950 p-3 rounded-lg border border-neutral-200 dark:border-neutral-800">
+                <label className="text-[10px] uppercase font-bold tracking-wide text-neutral-450 flex items-center gap-1">
+                  <Upload className="w-3.5 h-3.5" /> Imagen de Portada (Opcional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 text-center bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-800 rounded px-3 py-2 cursor-pointer text-xs font-bold transition-all text-neutral-850 dark:text-neutral-200 hover:border-emerald-500 hover:text-emerald-500">
+                    {editForm.imagenUrl ? "✓ Cambiar Imagen" : "Subir de PC"}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleEditProductImageUpload} 
+                      className="hidden" 
+                      disabled={isSubmitting}
+                    />
+                  </label>
+                  {editForm.imagenUrl && (
+                    <div className="w-8 h-8 rounded border overflow-hidden flex items-center justify-center shrink-0">
+                      <img src={editForm.imagenUrl} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold uppercase py-2.5 rounded-lg text-xs tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer mt-2"
+              >
+                {isSubmitting ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                Guardar Cambios
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

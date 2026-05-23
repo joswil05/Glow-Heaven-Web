@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from '../types/erp';
 import { 
   TrendingUp, Wallet, Activity, Package, AlertTriangle, 
-  ShoppingCart, RefreshCw, Printer, CheckCircle, PackageOpen, X, Search, XCircle,
-  Copy, Check, MessageCircle
+  RefreshCw, CheckCircle, PackageOpen, ArrowUpRight, ArrowDownRight,
+  CircleDollarSign, Award, Layers, Receipt, MessageCircle
 } from 'lucide-react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '../lib/firebase';
 import { PettyCashForm } from './PettyCashForm';
-import { cancelWebOrder, processPEPSSale } from '../services/inventoryService';
 
 interface DashboardOverviewProps {
   products: ERPProduct[];
@@ -29,6 +26,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onOpenQuickSale,
   businessConfig
 }) => {
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [activeTooltip, setActiveTooltip] = useState<{ x: number; y: number; label: string; sales: number; profit: number } | null>(null);
+
+  // Auto-dismiss notifications
+  useEffect(() => {
+    if (notification) {
+      const t = setTimeout(() => setNotification(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [notification]);
+
   // --- KPI CALCULATIONS ---
   const ventasBrutas = useMemo(() => {
     if (!Array.isArray(orders)) return 0;
@@ -56,7 +64,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
   const utilidadNeta = useMemo(() => {
     if (!Array.isArray(orders)) return 0;
-    // Calculo usando el costo real guardado en las ordenes
     const costoMercancia = orders
       .filter(o => o && o.estado !== 'pendiente_pago' && o.estado !== 'stock_comprometido' && o.estado !== 'cancelado')
       .reduce((acc, curr) => {
@@ -64,7 +71,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         return acc + (isNaN(cogs) ? 0 : cogs);
       }, 0);
       
-    // Fallback: Si no hay historial PEPS, estimamos para la UI
     const estimatedCOGS = costoMercancia > 0 ? costoMercancia : ventasBrutas * 0.45; 
     return Math.round((ventasBrutas - estimatedCOGS - gastosTotales) * 100) / 100;
   }, [ventasBrutas, gastosTotales, orders]);
@@ -75,70 +81,148 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     return products.filter(p => p && (p.stock_disponible || 0) <= (p.stock_minimo || 0) && p.activo);
   }, [products]);
 
-  // --- STATE FOR PREMIUM INTERACTION STATES ---
-  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
-  const [confirmingOrder, setConfirmingOrder] = useState<{ id: string; action: 'validar' | 'cancelar' } | null>(null);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-  // Auto-dismiss notifications
-  useEffect(() => {
-    if (notification) {
-      const t = setTimeout(() => setNotification(null), 4000);
-      return () => clearTimeout(t);
+  // --- 1. DYNAMIC SALES & PROFITS HISTORICAL DATA (LAST 7 DAYS) ---
+  const last7DaysData = useMemo(() => {
+    const days = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      days.push({
+        dateStr: d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+        dateKey: d.toDateString(),
+        sales: 0,
+        profit: 0
+      });
     }
-  }, [notification]);
-
-  // --- ORDER PIPELINES (UPDATED FOR BOTH PENDIENTE_PAGO AND STOCK_COMPROMETIDO) ---
-  const pedidosComprometidos = useMemo(() => {
-    if (!Array.isArray(orders)) return [];
-    return orders.filter(o => o && (o.estado === 'stock_comprometido' || o.estado === 'pendiente_pago'));
-  }, [orders]);
-
-  const pedidosListos = useMemo(() => {
-    if (!Array.isArray(orders)) return [];
-    return orders.filter(o => o && (o.estado === 'listo_despacho' || o.estado === 'entregado'));
-  }, [orders]);
-
-  // --- CONTROLLER HANDLERS ---
-  const handleExecuteValidar = async (order: ERPOrder) => {
-    setConfirmingOrder(null);
-    try {
-      await processPEPSSale(order);
-      setNotification({ message: `¡Pago validado exitosamente para la orden #${order.id_orden.slice(-6)}!`, type: 'success' });
-    } catch (error: any) {
-      setNotification({ message: `Error al validar pago: ${error.message}`, type: 'error' });
-    }
-  };
-
-  const handleExecuteCancelar = async (orderId: string) => {
-    setConfirmingOrder(null);
-    try {
-      await cancelWebOrder(orderId);
-      setNotification({ message: `La orden #${orderId.slice(-6)} ha sido cancelada y el stock fue liberado.`, type: 'success' });
-    } catch (error: any) {
-      setNotification({ message: `Error al cancelar la orden: ${error.message}`, type: 'error' });
-    }
-  };
-
-  const handleCopyWhatsApp = (order: ERPOrder) => {
-    const nombre = order.cliente?.nombre || (order as any).cliente_nombre || 'Cliente';
-    const banco = (order.envio?.banco_destino || 'banco').toUpperCase();
-    const total = order.total_cs;
-    const direccion = order.envio?.direccion || (order as any).cliente_direccion || (order as any).cliente?.direccion || 'N/A';
-    const itemsText = (order.items || []).map(it => `• ${it.cantidad}x ${it.nombre}`).join('\n');
     
-    const message = `*✨ GLOW HEAVEN ✨*\n` +
-      `*Confirmación de Pago* ✅\n\n` +
-      `Hola *${nombre}*, tu pago ha sido recibido con éxito en *${banco}*.\n\n` +
-      `📦 *Detalle del Pedido:*\n${itemsText}\n\n` +
-      `💰 *Total:* C$ ${total.toLocaleString('es-NI')}\n` +
-      `🚚 *Dirección:* ${direccion}\n\n` +
-      `Tu pedido está *Listo para Despacho* y pasará a bodega hoy mismo. ¡Muchas gracias por tu preferencia!`;
+    if (Array.isArray(orders)) {
+      orders.forEach(o => {
+        if (!o || o.estado === 'cancelado' || o.estado === 'pendiente_pago' || o.estado === 'stock_comprometido') return;
+        const oDate = new Date(o.fecha);
+        const oDateKey = oDate.toDateString();
+        const match = days.find(d => d.dateKey === oDateKey);
+        if (match) {
+          match.sales += Number(o.total_cs) || 0;
+          match.profit += Number(o.utilidad_bruta_cs || o.total_cs * 0.55) || 0; // fallback if profit not recorded
+        }
+      });
+    }
+    
+    return days;
+  }, [orders]);
 
-    navigator.clipboard.writeText(message);
-    setCopiedOrderId(order.id_orden);
-    setTimeout(() => setCopiedOrderId(null), 2000);
-  };
+  // Max value for scaling SVG chart
+  const chartScales = useMemo(() => {
+    const maxSales = Math.max(...last7DaysData.map(d => d.sales), 100);
+    const maxProfit = Math.max(...last7DaysData.map(d => d.profit), 100);
+    const maxVal = Math.max(maxSales, maxProfit, 1000);
+    return { maxVal, maxSales, maxProfit };
+  }, [last7DaysData]);
+
+  // --- 2. PAYMENT METHODS & CHANNELS BREAKDOWN ---
+  const paymentBreakdown = useMemo(() => {
+    let cashCount = 0;
+    let bankCount = 0;
+    let totalPaidOrders = 0;
+
+    if (Array.isArray(orders)) {
+      orders.forEach(o => {
+        if (!o || o.estado === 'cancelado' || o.estado === 'pendiente_pago') return;
+        totalPaidOrders++;
+        if (o.metodo_pago === 'efectivo') {
+          cashCount++;
+        } else {
+          bankCount++;
+        }
+      });
+    }
+
+    const cashPercent = totalPaidOrders > 0 ? Math.round((cashCount / totalPaidOrders) * 100) : 0;
+    const bankPercent = totalPaidOrders > 0 ? Math.round((bankCount / totalPaidOrders) * 100) : 0;
+    
+    return { cashPercent, bankPercent, totalPaidOrders, cashCount, bankCount };
+  }, [orders]);
+
+  // --- 3. TOP SELLING PRODUCTS ---
+  const topSellingProducts = useMemo(() => {
+    const counts = new Map<string, { sku: string; nombre: string; cant: number; revenue: number }>();
+    
+    if (Array.isArray(orders)) {
+      orders.forEach(o => {
+        if (!o || o.estado === 'cancelado' || o.estado === 'pendiente_pago') return;
+        const items = o.items || [];
+        items.forEach(it => {
+          if (!it.sku) return;
+          const curr = counts.get(it.sku) || { sku: it.sku, nombre: it.nombre || 'Desconocido', cant: 0, revenue: 0 };
+          curr.cant += Number(it.cantidad) || 0;
+          curr.revenue += Number(it.precio_cobrado || 0);
+          counts.set(it.sku, curr);
+        });
+      });
+    }
+
+    return Array.from(counts.values())
+      .sort((a, b) => b.cant - a.cant)
+      .slice(0, 4);
+  }, [orders]);
+
+  // --- 4. RECENT FINANCIAL ACTIVITY FEED (COMBINED LIST) ---
+  const recentFinancialActivity = useMemo(() => {
+    const list: Array<{
+      id: string;
+      fecha: string;
+      tipo: 'ingreso_venta' | 'gasto_operativo';
+      monto: number;
+      descripcion: string;
+      categoria?: string;
+    }> = [];
+
+    // Add paid orders
+    if (Array.isArray(orders)) {
+      orders.forEach(o => {
+        if (!o || o.estado === 'cancelado' || o.estado === 'pendiente_pago' || o.estado === 'stock_comprometido') return;
+        list.push({
+          id: o.id_orden,
+          fecha: String(o.fecha),
+          tipo: 'ingreso_venta',
+          monto: o.total_cs,
+          descripcion: `Venta #${o.id_orden.slice(-6)} - Cliente: ${o.cliente?.nombre}`
+        });
+      });
+    }
+
+    // Add expenses
+    if (Array.isArray(expenses)) {
+      expenses.forEach(e => {
+        if (!e) return;
+        list.push({
+          id: e.id_gasto,
+          fecha: String(e.fecha),
+          tipo: 'gasto_operativo',
+          monto: e.monto_cs,
+          descripcion: e.descripcion,
+          categoria: e.categoria
+        });
+      });
+    }
+
+    // Sort by date descending
+    return list
+      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+      .slice(0, 10);
+  }, [orders, expenses]);
+
+  // Sparkline simulation data (percentage comparisons)
+  const salesVelocity = useMemo(() => {
+    if (last7DaysData.length < 2) return { percent: 0, up: true };
+    const today = last7DaysData[6].sales;
+    const yesterday = last7DaysData[5].sales;
+    if (yesterday === 0) return { percent: today > 0 ? 100 : 0, up: today > 0 };
+    const diff = today - yesterday;
+    const pct = Math.round((diff / yesterday) * 100);
+    return { percent: Math.abs(pct), up: pct >= 0 };
+  }, [last7DaysData]);
 
   if (isLoading) {
     return (
@@ -158,290 +242,317 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     );
   }
 
+  // Draw sales line points
+  const width = 500;
+  const height = 180;
+  const paddingX = 40;
+  const paddingY = 20;
+  const pointsSales = last7DaysData.map((d, i) => {
+    const x = paddingX + (i * (width - paddingX * 2)) / 6;
+    const y = height - paddingY - (d.sales / chartScales.maxVal) * (height - paddingY * 2);
+    return { x, y, sales: d.sales, profit: d.profit, label: d.dateStr };
+  });
+
+  const pointsProfit = last7DaysData.map((d, i) => {
+    const x = paddingX + (i * (width - paddingX * 2)) / 6;
+    const y = height - paddingY - (d.profit / chartScales.maxVal) * (height - paddingY * 2);
+    return { x, y };
+  });
+
+  const salesPath = pointsSales.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const profitPath = pointsProfit.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  
+  const salesAreaPath = `${salesPath} L ${pointsSales[pointsSales.length - 1].x} ${height - paddingY} L ${pointsSales[0].x} ${height - paddingY} Z`;
+  const profitAreaPath = `${profitPath} L ${pointsProfit[pointsProfit.length - 1].x} ${height - paddingY} L ${pointsProfit[0].x} ${height - paddingY} Z`;
+
   return (
-    <div className="flex-1 p-4 h-full flex flex-col min-h-0 relative">
-      {/* Toast Notification */}
-      {notification && (
-        <div className={`fixed bottom-4 right-4 z-50 p-4 rounded-xl shadow-lg border text-sm flex items-center gap-2 animate-in fade-in slide-in-from-bottom-5 duration-300 ${
-          notification.type === 'success' 
-            ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-850 text-emerald-800 dark:text-emerald-400' 
-            : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-850 text-rose-800 dark:text-rose-400'
-        }`}>
-          <div className={notification.type === 'success' ? 'text-emerald-600' : 'text-rose-605'}>
-            {notification.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-          </div>
-          <span>{notification.message}</span>
-          <button onClick={() => setNotification(null)} className="ml-2 font-mono text-xs hover:opacity-75 font-bold">×</button>
-        </div>
-      )}
+    <div className="flex-1 p-4 h-full flex flex-col min-h-0 relative bg-neutral-50 dark:bg-neutral-950 font-sans">
       
-      {/* HEADER & ATTAJOS */}
+      {/* HEADER */}
       <header className="flex justify-between items-center mb-4 px-2 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Centro de Control Operativo</h1>
-          <p className="text-xs text-neutral-500 font-mono">Terminal ERP Glow Heaven | C$ (NIO)</p>
+          <h1 className="text-2xl font-bold tracking-tight">Centro de Control Analítico</h1>
+          <p className="text-xs text-neutral-500 font-mono">Terminal ERP Glow Heaven | C$ (NIO) & USD</p>
         </div>
         <div className="flex gap-4 text-[10px] font-mono text-neutral-500 uppercase tracking-widest bg-white dark:bg-neutral-900 px-4 py-2 rounded-lg border border-neutral-200 dark:border-neutral-800 shadow-sm">
+          <span>T. Cambio: <strong className="text-emerald-600 font-bold">C$ {businessConfig?.tipo_cambio || 36.5}</strong></span>
           <button onClick={onOpenQuickSale} className="hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer">
             <kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">F2</kbd> Venta Física
           </button>
-          <span><kbd className="font-bold border border-neutral-300 dark:border-neutral-700 px-1 rounded mr-1">Ctrl+G</kbd> Caja Chica</span>
         </div>
       </header>
 
-      {/* A. KPI FINANCIAL MODULE (TOP) */}
+      {/* A. KPI CARDS */}
       <div className="grid grid-cols-4 gap-4 mb-4 shrink-0">
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm relative overflow-hidden group">
           <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest flex items-center gap-2 mb-1">
-            <TrendingUp className="w-3.5 h-3.5" /> Ventas Brutas (Día)
+            <CircleDollarSign className="w-3.5 h-3.5 text-emerald-555" /> Ventas Brutas Acumuladas
           </span>
           <span className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">C$ {ventasBrutas.toLocaleString('es-NI')}</span>
+          <div className="flex items-center gap-1 mt-1 text-[10px] font-mono">
+            {salesVelocity.up ? (
+              <span className="text-emerald-600 dark:text-emerald-400 flex items-center"><ArrowUpRight className="w-3 h-3" /> +{salesVelocity.percent}%</span>
+            ) : (
+              <span className="text-rose-600 dark:text-rose-400 flex items-center"><ArrowDownRight className="w-3 h-3" /> -{salesVelocity.percent}%</span>
+            )}
+            <span className="text-neutral-400">vs período anterior</span>
+          </div>
         </div>
         
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm relative overflow-hidden group">
           <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest flex items-center gap-2 mb-1">
-            <Package className="w-3.5 h-3.5" /> Capital Inmovilizado
+            <Package className="w-3.5 h-3.5 text-amber-550" /> Capital Inmovilizado
           </span>
           <span className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400">C$ {capitalInmovilizado.toLocaleString('es-NI')}</span>
+          <span className="text-[10px] text-neutral-400 font-mono mt-1">Valorado en costo adquisición</span>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm relative overflow-hidden group">
           <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest flex items-center gap-2 mb-1">
-            <Wallet className="w-3.5 h-3.5" /> Margen Utilidad Neta
+            <Wallet className="w-3.5 h-3.5 text-indigo-550" /> Margen Utilidad Neta
           </span>
           <span className="text-2xl font-bold font-mono text-indigo-600 dark:text-indigo-400">C$ {utilidadNeta.toLocaleString('es-NI')}</span>
+          <span className="text-[10px] text-neutral-400 font-mono mt-1">
+            Deducido COGS (PEPS) y gastos
+          </span>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm">
+        <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col shadow-sm relative overflow-hidden group">
           <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest flex items-center gap-2 mb-1">
-            <Activity className="w-3.5 h-3.5" /> Eficiencia Rotación
+            <Activity className="w-3.5 h-3.5 text-purple-550" /> Eficiencia Rotación
+          </span>
+          <span className="text-2xl font-bold font-mono text-purple-600 dark:text-purple-400">
+            {products.length > 0 ? Math.round((products.filter(p => (p.stock_disponible || 0) > 0).length / products.length) * 100) : 0}%
           </span>
           <div className="flex items-center gap-2 mt-1">
-            <div className="h-2 w-full bg-emerald-500/20 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 w-[85%]"></div></div>
-            <span className="text-xs font-bold font-mono">85%</span>
+            <div className="h-1.5 w-full bg-purple-500/20 rounded-full overflow-hidden">
+              <div className="h-full bg-purple-500" style={{ width: `${products.length > 0 ? (products.filter(p => (p.stock_disponible || 0) > 0).length / products.length) * 100 : 0}%` }}></div>
+            </div>
+            <span className="text-[9px] font-bold font-mono">En stock</span>
           </div>
         </div>
       </div>
 
-      {/* LOWER GRID: B, C, D Modules */}
+      {/* LOWER GRID */}
       <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
         
-        {/* B. PIPELINE OMNICANAL (LEFT - 8 Cols) */}
-        <div className="col-span-8 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col overflow-hidden shadow-sm">
-          <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/50 flex justify-between items-center">
-            <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4" /> Pipeline de Despacho
-            </h2>
-            <button onClick={onOpenQuickSale} className="bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[10px] font-bold px-3 py-1.5 rounded uppercase tracking-wider hover:opacity-80 transition-opacity cursor-pointer">
-              + Venta Física (F2)
-            </button>
-          </div>
+        {/* LEFT COLUMN: CHARTS & LEDGER (8 COLS) */}
+        <div className="col-span-8 flex flex-col gap-4 min-h-0">
           
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            {/* ROW 1: Stock Comprometido (Por validar) */}
-            <div>
-              <h3 className="text-xs font-bold text-amber-600 dark:text-amber-500 mb-3 border-l-2 border-amber-500 pl-2 uppercase tracking-wide">Pedidos por Conciliar y Validar Pago</h3>
-              {pedidosComprometidos.length === 0 ? (
-                <p className="text-xs text-neutral-400 italic">No hay pedidos pendientes de conciliación.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {pedidosComprometidos.map(p => {
-                    const cleanPhone = String(p.cliente?.telefono || '').replace(/\D/g, '');
-                    let msg = businessConfig?.mensaje_cobro_wa || 'Hola {nombre}! Gracias por tu pedido en Glow Heaven. Recibimos tu solicitud #{id_orden} por C$ {total}.';
-                    msg = msg.replace('{nombre}', p.cliente?.nombre || 'Cliente')
-                             .replace('{id_orden}', p.id_orden.slice(-6))
-                             .replace('{total}', p.total_cs.toLocaleString('es-NI'))
-                             .replace('{banco}', (p.envio?.banco_destino || 'Banco').toUpperCase());
-                    const waChatUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(msg)}`;
-
-                    return (
-                      <div key={p.id_orden} className="border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-xl flex flex-col justify-between shadow-xs">
-                        <div>
-                        {/* Header of Card */}
-                        <div className="flex justify-between items-center mb-2.5">
-                          <span className="text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded">
-                            #{p.id_orden.slice(-6)}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[9px] uppercase font-bold tracking-wider bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 px-1.5 py-0.5 rounded">
-                              {p.envio?.canal === 'web_whatsapp' ? '🌐 WEB' : p.envio?.canal === 'instagram' ? '📸 INSTAGRAM' : '💬 WHATSAPP'}
-                            </span>
-                            <span className="text-[9px] uppercase font-bold tracking-wider bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-mono">
-                              {p.envio?.banco_destino?.toUpperCase() || 'N/A'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Customer Info */}
-                        <div className="mb-2">
-                          <p className="font-black text-sm text-neutral-850 dark:text-white">
-                            {p.cliente?.nombre || (p as any).cliente_nombre || 'Cliente'}
-                          </p>
-                          <p className="text-xs text-neutral-500 font-mono flex items-center gap-1 mt-0.5">
-                            📞 {p.cliente?.telefono || (p as any).cliente_celular || (p as any).cliente?.celular || 'N/A'}
-                          </p>
-                          <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1 italic leading-tight">
-                            📍 {p.envio?.direccion || (p as any).cliente_direccion || (p as any).cliente?.direccion || 'N/A'}
-                          </p>
-                        </div>
-
-                        {/* Items */}
-                        <ul className="text-xs text-neutral-600 dark:text-neutral-400 mt-2 mb-3 border-t border-b border-neutral-200/50 dark:border-neutral-800/50 py-1.5 space-y-1">
-                          {(p.items || []).map((it, i) => (
-                            <li key={i} className="flex justify-between font-mono">
-                              <span>• {it.cantidad}x {it.nombre}</span>
-                              <span className="text-neutral-450 text-[10px]">({it.sku})</span>
-                            </li>
-                          ))}
-                        </ul>
-                        
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Total</span>
-                          <span className="text-sm font-mono font-black text-neutral-800 dark:text-neutral-200">C$ {p.total_cs.toLocaleString('es-NI')}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Action buttons */}
-                      <div className="mt-2 space-y-2">
-                        {/* Dynamic WhatsApp Chat Link */}
-                        <a
-                          href={waChatUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer text-center"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 fill-white/10" /> Iniciar Chat WhatsApp
-                        </a>
-
-                        {/* Copy template button */}
-                        <button
-                          onClick={() => handleCopyWhatsApp(p)}
-                          className="w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-850 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-[10px] uppercase font-bold py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
-                        >
-                          {copiedOrderId === p.id_orden ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 text-emerald-550 animate-bounce" /> Copiado!
-                            </>
-                          ) : (
-                            <>
-                              <MessageCircle className="w-3.5 h-3.5 text-emerald-550" /> Copiar Confirmación WA
-                            </>
-                          )}
-                        </button>
-
-                        <div className="flex gap-2">
-                          {confirmingOrder?.id === p.id_orden ? (
-                            <>
-                              <button
-                                onClick={() => setConfirmingOrder(null)}
-                                className="flex-1 bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-850 dark:hover:bg-neutral-750 text-neutral-700 dark:text-neutral-300 text-[10px] uppercase font-bold py-2 rounded-lg transition-colors cursor-pointer"
-                              >
-                                Atrás
-                              </button>
-                              <button
-                                onClick={() => confirmingOrder.action === 'validar' ? handleExecuteValidar(p) : handleExecuteCancelar(p.id_orden)}
-                                className={`flex-1 text-[10px] uppercase font-bold py-2 rounded-lg text-white transition-colors cursor-pointer ${
-                                  confirmingOrder.action === 'validar' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
-                                }`}
-                              >
-                                ¿Confirmar?
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button 
-                                onClick={() => setConfirmingOrder({ id: p.id_orden, action: 'cancelar' })}
-                                className="flex-1 bg-white hover:bg-rose-50 dark:bg-neutral-900 dark:hover:bg-rose-950 border border-rose-200 dark:border-rose-900/50 text-rose-600 text-[10px] uppercase font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                                title="Cancelar Orden y Liberar Stock"
-                              >
-                                <XCircle className="w-3.5 h-3.5" /> Cancelar
-                              </button>
-                              <button 
-                                onClick={() => setConfirmingOrder({ id: p.id_orden, action: 'validar' })}
-                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold py-2 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" /> Validar (PEPS)
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* ROW 2: Listo para Despacho */}
-            <div>
-              <h3 className="text-xs font-bold text-emerald-600 dark:text-emerald-500 mb-3 border-l-2 border-emerald-500 pl-2 uppercase tracking-wide">Despachados Recientemente</h3>
-              {pedidosListos.length === 0 ? (
-                <p className="text-xs text-neutral-400 italic">No hay pedidos despachados recientes.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {pedidosListos.slice(0, 10).map(p => (
-                    <div key={p.id_orden} className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 rounded-lg flex justify-between items-center shadow-sm">
-                      <div>
-                        <span className="text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded">#{p.id_orden.slice(-6)}</span>
-                        <p className="font-bold text-sm mt-1">{p.cliente?.nombre || (p as any).cliente_nombre || 'Cliente'}</p>
-                        <p className="text-[10px] text-neutral-400 mt-0.5">{p.envio?.canal === 'web_whatsapp' ? 'Web' : 'Redes'} • C$ {p.total_cs}</p>
-                      </div>
-                      <button className="p-2.5 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 rounded-lg text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer" title="Imprimir Remisión">
-                        <Printer className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN (4 Cols) */}
-        <div className="col-span-4 flex flex-col gap-4 min-h-0">
-          
-          {/* C. ALERTAS DE REABASTECIMIENTO CRÍTICO */}
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col overflow-hidden shadow-sm flex-1">
-            <div className="p-3 border-b border-rose-100 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-950/20">
-              <h2 className="text-[11px] font-bold uppercase tracking-widest text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" /> Alertas Críticas (Stock)
+          {/* B1. PERFORMANCE CHARTS */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-sm flex flex-col min-h-0 relative">
+            <div className="flex justify-between items-center mb-3 shrink-0">
+              <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-500" /> Tendencia Operativa (Últimos 7 días)
               </h2>
+              <div className="flex gap-4 text-[10px] font-mono">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span> Ventas</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-indigo-500 rounded-full"></span> Utilidad</span>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
-              {productosCriticos.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center p-4 text-center">
-                  <PackageOpen className="w-8 h-8 text-neutral-300 dark:text-neutral-700 mb-2" />
-                  <p className="text-xs text-neutral-400">Inventario sano. No hay alertas críticas de reabastecimiento.</p>
+            
+            {/* SVG Chart area */}
+            <div className="flex-1 w-full relative min-h-0 mt-1">
+              <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.25"/>
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25"/>
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0"/>
+                  </linearGradient>
+                </defs>
+
+                {/* Gridlines */}
+                {[0, 1, 2, 3, 4].map((grid, index) => {
+                  const y = paddingY + (index * (height - paddingY * 2)) / 4;
+                  return (
+                    <g key={index}>
+                      <line x1={paddingX} y1={y} x2={width - paddingX} y2={y} stroke="#e5e5e5" strokeDasharray="3 3" className="dark:stroke-neutral-800"/>
+                      <text x={paddingX - 10} y={y + 3} textAnchor="end" className="fill-neutral-400 font-mono text-[8px]">
+                        {(chartScales.maxVal - (index * chartScales.maxVal) / 4).toLocaleString('es-NI', { notation: 'compact' })}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Draw X Axis labels */}
+                {last7DaysData.map((d, i) => {
+                  const x = paddingX + (i * (width - paddingX * 2)) / 6;
+                  return (
+                    <text key={i} x={x} y={height - 4} textAnchor="middle" className="fill-neutral-400 font-mono text-[8px]">
+                      {d.dateStr}
+                    </text>
+                  );
+                })}
+
+                {/* Areas */}
+                <path d={salesAreaPath} fill="url(#salesGrad)" />
+                <path d={profitAreaPath} fill="url(#profitGrad)" />
+
+                {/* Paths */}
+                <path d={salesPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d={profitPath} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+
+                {/* Node Circles */}
+                {pointsSales.map((p, i) => (
+                  <circle 
+                    key={i} 
+                    cx={p.x} 
+                    cy={p.y} 
+                    r="4" 
+                    fill="#10b981" 
+                    stroke="#ffffff" 
+                    strokeWidth="1.5"
+                    className="cursor-pointer hover:r-5 transition-all"
+                    onMouseEnter={(e) => setActiveTooltip({
+                      x: p.x,
+                      y: p.y,
+                      label: p.label,
+                      sales: p.sales,
+                      profit: p.profit
+                    })}
+                    onMouseLeave={() => setActiveTooltip(null)}
+                  />
+                ))}
+
+                {pointsProfit.map((p, i) => (
+                  <circle 
+                    key={i} 
+                    cx={p.x} 
+                    cy={p.y} 
+                    r="4" 
+                    fill="#6366f1" 
+                    stroke="#ffffff" 
+                    strokeWidth="1.5"
+                    className="cursor-pointer hover:r-5 transition-all"
+                  />
+                ))}
+              </svg>
+
+              {/* Tooltip Overlay */}
+              {activeTooltip && (
+                <div 
+                  className="absolute bg-white/95 dark:bg-neutral-900/95 border border-neutral-200 dark:border-neutral-800 p-2.5 rounded-lg shadow-lg text-[10px] font-mono z-20 pointer-events-none"
+                  style={{ left: activeTooltip.x - 50, top: activeTooltip.y - 85 }}
+                >
+                  <p className="font-bold text-neutral-800 dark:text-neutral-200 border-b border-neutral-100 dark:border-neutral-800 pb-1 mb-1">{activeTooltip.label}</p>
+                  <p className="text-emerald-600">Ventas: C$ {activeTooltip.sales.toLocaleString('es-NI')}</p>
+                  <p className="text-indigo-600">Utilidad: C$ {activeTooltip.profit.toLocaleString('es-NI')}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* B2. RECENT FINANCIAL ACTIVITY LEDGER */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col min-h-0 flex-1 shadow-sm overflow-hidden">
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/40 flex justify-between items-center shrink-0">
+              <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-neutral-400" /> Bitácora Contable y Transacciones Recientes
+              </h2>
+              <span className="text-[9px] font-mono text-neutral-400 uppercase">Historial del Período</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-850 p-2 text-xs">
+              {recentFinancialActivity.length === 0 ? (
+                <div className="h-32 flex items-center justify-center text-neutral-400 italic">
+                  No hay actividades financieras registradas en este ciclo.
                 </div>
               ) : (
-                productosCriticos.map(prod => (
-                  <div key={prod.id} className="p-3 border-b border-neutral-100 dark:border-neutral-800 last:border-0 flex flex-col gap-2">
-                    <div className="flex justify-between items-start">
+                recentFinancialActivity.map(act => (
+                  <div key={act.id} className="py-2.5 px-2 flex justify-between items-center hover:bg-neutral-50/50 dark:hover:bg-neutral-950/20 transition-all rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${act.tipo === 'ingreso_venta' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
                       <div>
-                        <span className="text-[9px] uppercase tracking-wider font-bold text-neutral-400 flex items-center gap-1">
-                          {prod.categoria === 'perfume' ? '✨' : '👜'} {prod.categoria}
-                        </span>
-                        <p className="text-sm font-bold mt-0.5">{prod.nombre}</p>
+                        <p className="font-bold text-neutral-800 dark:text-neutral-200">{act.descripcion}</p>
+                        <p className="text-[9px] text-neutral-400 font-mono">
+                          {new Date(act.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          {act.categoria && ` • Categoría: ${act.categoria.toUpperCase()}`}
+                        </p>
                       </div>
-                      <span className="text-[10px] font-mono font-bold bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded">
-                        Faltan {prod.stock_minimo - prod.stock_disponible} u.
-                      </span>
                     </div>
-                    <div className="flex justify-between items-center mt-1">
-                      <p className="text-[10px] text-neutral-500 font-mono">Stock: {prod.stock_disponible} / Min: {prod.stock_minimo}</p>
-                      <button className="text-[9px] uppercase font-bold tracking-wider text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
-                        Generar OC ➔
-                      </button>
-                    </div>
+                    <span className={`font-bold font-mono ${act.tipo === 'ingreso_venta' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {act.tipo === 'ingreso_venta' ? '+' : '-'} C$ {act.monto.toLocaleString('es-NI')}
+                    </span>
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {/* D. CAJA CHICA (COMPONENT) */}
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col overflow-hidden shadow-sm h-72 shrink-0">
+        </div>
+
+        {/* RIGHT COLUMN: ALERTS, TOP PRODUCTS & PETTY CASH (4 COLS) */}
+        <div className="col-span-4 flex flex-col gap-4 min-h-0">
+          
+          {/* C. ALERTAS DE REABASTECIMIENTO CRÍTICO */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col overflow-hidden shadow-sm h-48 shrink-0">
+            <div className="p-3 border-b border-rose-100 dark:border-rose-900/30 bg-rose-50/50 dark:bg-rose-950/20">
+              <h2 className="text-[11px] font-bold uppercase tracking-widest text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" /> Alertas de Reabastecimiento
+              </h2>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {productosCriticos.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center p-4 text-center opacity-60">
+                  <PackageOpen className="w-8 h-8 text-neutral-300 dark:text-neutral-700 mb-1" />
+                  <p className="text-[10px] text-neutral-400 italic">Catálogo saludable. Sin alertas.</p>
+                </div>
+              ) : (
+                productosCriticos.map(prod => (
+                  <div key={prod.sku || prod.id} className="p-2 border-b border-neutral-100 dark:border-neutral-800/50 last:border-0 flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-neutral-800 dark:text-neutral-200">{prod.nombre}</p>
+                      <p className="text-[9px] text-neutral-400 font-mono">Stock: {prod.stock_disponible} / Min: {prod.stock_minimo}</p>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded">
+                      Falta {prod.stock_minimo - prod.stock_disponible} u.
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* E. TOP SELLING PRODUCTS */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col overflow-hidden shadow-sm h-64 shrink-0">
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/40">
+              <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
+                <Award className="w-4 h-4 text-amber-550" /> Productos Más Populares (Top 4)
+              </h2>
+            </div>
+            <div className="flex-1 p-3 space-y-3 justify-center flex flex-col">
+              {topSellingProducts.length === 0 ? (
+                <div className="text-center text-xs text-neutral-400 italic">No hay historial de ventas.</div>
+              ) : (
+                topSellingProducts.map((p, idx) => {
+                  const maxQty = topSellingProducts[0].cant || 1;
+                  const ratio = Math.round((p.cant / maxQty) * 100);
+
+                  return (
+                    <div key={p.sku} className="space-y-1">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="truncate max-w-[70%] font-bold text-neutral-800 dark:text-neutral-200">
+                          {idx + 1}. {p.nombre}
+                        </span>
+                        <span className="font-mono text-neutral-400 text-[10px]">
+                          {p.cant} u. (C$ {p.revenue.toLocaleString('es-NI')})
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500" style={{ width: `${ratio}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* D. CAJA CHICA (INPUT FORM) */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col overflow-hidden shadow-sm h-64 shrink-0">
             <PettyCashForm expenses={expenses} />
           </div>
 
