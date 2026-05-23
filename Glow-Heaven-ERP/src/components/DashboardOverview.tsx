@@ -28,38 +28,60 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 }) => {
   // --- KPI CALCULATIONS ---
   const ventasBrutas = useMemo(() => {
+    if (!Array.isArray(orders)) return 0;
     return orders
-      .filter(o => o.estado !== 'pendiente_pago' && o.estado !== 'stock_comprometido' && o.estado !== 'cancelado') // Liquidadas
-      .reduce((acc, curr) => acc + curr.total_cs, 0);
+      .filter(o => o && o.estado !== 'pendiente_pago' && o.estado !== 'stock_comprometido' && o.estado !== 'cancelado') // Liquidadas
+      .reduce((acc, curr) => acc + (Number(curr.total_cs) || 0), 0);
   }, [orders]);
 
   const capitalInmovilizado = useMemo(() => {
-    return batches.reduce((acc, curr) => acc + (curr.cantidad_restante * curr.costo_adquisicion), 0);
+    if (!Array.isArray(batches)) return 0;
+    return batches.reduce((acc, curr) => {
+      if (!curr) return acc;
+      const qty = Number(curr.cantidad_restante) || 0;
+      const cost = Number(curr.costo_adquisicion) || 0;
+      return acc + (qty * cost);
+    }, 0);
   }, [batches]);
 
   const gastosTotales = useMemo(() => {
-    return expenses.reduce((acc, curr) => acc + curr.monto_cs, 0);
+    if (!Array.isArray(expenses)) return 0;
+    return expenses
+      .filter(e => e && (e as any).tipo === 'gasto_operativo')
+      .reduce((acc, curr) => acc + (Number(curr.monto_cs) || 0), 0);
   }, [expenses]);
 
   const utilidadNeta = useMemo(() => {
+    if (!Array.isArray(orders)) return 0;
     // Calculo usando el costo real guardado en las ordenes
     const costoMercancia = orders
-      .filter(o => o.estado !== 'pendiente_pago' && o.estado !== 'stock_comprometido' && o.estado !== 'cancelado')
-      .reduce((acc, curr) => acc + (curr as any).costo_peps_total_cs || 0, 0);
+      .filter(o => o && o.estado !== 'pendiente_pago' && o.estado !== 'stock_comprometido' && o.estado !== 'cancelado')
+      .reduce((acc, curr) => {
+        const cogs = Number((curr as any).costo_peps_total_cs);
+        return acc + (isNaN(cogs) ? 0 : cogs);
+      }, 0);
       
-    // Fallback: Si no hay historial PEPS, simulamos para la UI
+    // Fallback: Si no hay historial PEPS, estimamos para la UI
     const estimatedCOGS = costoMercancia > 0 ? costoMercancia : ventasBrutas * 0.45; 
-    return ventasBrutas - estimatedCOGS - gastosTotales;
+    return Math.round((ventasBrutas - estimatedCOGS - gastosTotales) * 100) / 100;
   }, [ventasBrutas, gastosTotales, orders]);
 
   // --- ALERTS ---
   const productosCriticos = useMemo(() => {
-    return products.filter(p => p.stock_disponible <= p.stock_minimo && p.activo);
+    if (!Array.isArray(products)) return [];
+    return products.filter(p => p && (p.stock_disponible || 0) <= (p.stock_minimo || 0) && p.activo);
   }, [products]);
 
   // --- ORDER PIPELINES ---
-  const pedidosComprometidos = orders.filter(o => o.estado === 'stock_comprometido');
-  const pedidosListos = orders.filter(o => o.estado === 'listo_despacho' || o.estado === 'entregado'); // 'entregado' también para ver histórico reciente
+  const pedidosComprometidos = useMemo(() => {
+    if (!Array.isArray(orders)) return [];
+    return orders.filter(o => o && o.estado === 'stock_comprometido');
+  }, [orders]);
+
+  const pedidosListos = useMemo(() => {
+    if (!Array.isArray(orders)) return [];
+    return orders.filter(o => o && (o.estado === 'listo_despacho' || o.estado === 'entregado'));
+  }, [orders]);
 
   const handleValidarPago = async (order: ERPOrder) => {
     if (window.confirm(`¿Confirmar pago y descontar PEPS de la orden ${order.id_orden}?`)) {
@@ -181,7 +203,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         </div>
                         <p className="font-bold text-sm">{p.cliente_nombre}</p>
                         <ul className="text-xs text-neutral-600 dark:text-neutral-400 mt-1 mb-2">
-                          {p.items.map((it, i) => <li key={i}>• {it.cantidad}x {it.nombre}</li>)}
+                          {(p.items || []).map((it, i) => <li key={i}>• {it.cantidad}x {it.nombre}</li>)}
                         </ul>
                         <p className="text-sm font-mono font-bold text-neutral-800 dark:text-neutral-200">C$ {p.total_cs}</p>
                       </div>

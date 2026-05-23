@@ -26,6 +26,10 @@ export interface ERPProduct {
 
   // Lotes vinculados para el motor PEPS
   lotes?: InventoryBatch[];
+
+  // Precios del catálogo (Firestore)
+  precio?: number;
+  precio_venta?: number;
 }
 
 export interface InventoryBatch {

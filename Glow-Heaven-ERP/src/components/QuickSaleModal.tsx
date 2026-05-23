@@ -7,15 +7,13 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ERPProduct, ERPOrderItem, ERPOrder } from '../types/erp';
 import { 
   Search, X, ShoppingCart, Plus, Minus, Trash2, 
-  CheckCircle, CreditCard, Banknote, Package, Loader2
+  CheckCircle, CreditCard, Banknote, Package, Loader2, AlertCircle
 } from 'lucide-react';
-import { processPEPSSale } from '../services/inventoryService';
 
 interface QuickSaleModalProps {
   onClose: () => void;
   products: ERPProduct[];
-  // Nota: En producción, aquí se inyectaría la instancia de 'db' o una función 
-  // handleProcessSale que ejecute el batch write en Firestore.
+  onProcessPEPSSale: (orderData: ERPOrder) => Promise<void>;
 }
 
 interface CartItem extends ERPOrderItem {
@@ -23,17 +21,24 @@ interface CartItem extends ERPOrderItem {
   precio_unitario: number;
 }
 
-export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, products }) => {
+export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ 
+  onClose, 
+  products,
+  onProcessPEPSSale
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'efectivo' | 'transferencia'>('efectivo');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // --- UI Error/Success Feedback ---
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // 1. AUTO-FOCUS AL ABRIR EL MODAL (Preparado para Escáner o Teclado)
   useEffect(() => {
-    // Un pequeño delay para asegurar que el componente esté montado visualmente
     const timer = setTimeout(() => {
       searchInputRef.current?.focus();
     }, 100);
@@ -42,14 +47,14 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
 
   // 2. BÚSQUEDA PREDICTIVA HÍBRIDA (SKU o Nombre)
   const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-    const term = searchTerm.toLowerCase();
+    const term = (searchTerm || '').trim().toLowerCase();
+    if (!term) return [];
     
     return products.filter(p => 
-      p.activo && (
-        p.sku.toLowerCase().includes(term) || 
-        p.nombre.toLowerCase().includes(term) ||
-        p.marca.toLowerCase().includes(term)
+      p && p.activo && (
+        (p.sku || '').toLowerCase().includes(term) || 
+        (p.nombre || '').toLowerCase().includes(term) ||
+        (p.marca || '').toLowerCase().includes(term)
       )
     ).slice(0, 5); // Limitar a los 5 mejores resultados visualmente
   }, [searchTerm, products]);
@@ -58,21 +63,32 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      const exactMatch = products.find(p => p.sku.toLowerCase() === searchTerm.toLowerCase());
+      setFormError(null);
+      setFormSuccess(null);
+      
+      const cleanTerm = searchTerm.trim().toUpperCase();
+      if (!cleanTerm) return;
+
+      const exactMatch = products.find(p => p && p.sku && p.sku.toUpperCase() === cleanTerm);
       if (exactMatch) {
         addToCart(exactMatch);
         setSearchTerm(''); // Limpiar para el siguiente escaneo
+      } else {
+        setFormError(`El SKU "${cleanTerm}" no fue encontrado en el catálogo.`);
       }
     }
   };
 
   const addToCart = (product: ERPProduct) => {
+    setFormError(null);
+    setFormSuccess(null);
+
     setCart(prev => {
       const existing = prev.find(item => item.sku === product.sku);
       if (existing) {
         // Validación básica de stock para mostrador
-        if (existing.cantidad + 1 > product.stock_disponible) {
-          alert(`Stock insuficiente de ${product.nombre}. Disponible: ${product.stock_disponible}`);
+        if (existing.cantidad + 1 > (product.stock_disponible || 0)) {
+          setFormError(`Stock insuficiente de ${product.nombre}. Disponible: ${product.stock_disponible || 0}`);
           return prev;
         }
         return prev.map(item => 
@@ -82,33 +98,36 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
         );
       }
       
-      if (product.stock_disponible < 1) {
-        alert('Producto Agotado');
+      if ((product.stock_disponible || 0) < 1) {
+        setFormError(`El producto ${product.nombre} está agotado.`);
         return prev;
       }
 
-      // Mocking un precio de venta general. En la BD real el ERPProduct debería tener 'precio_venta'
-      const mockPrecioVenta = 1200; 
+      // Extraer el precio real del catálogo o usar fallback de 1200 C$
+      const precioVenta = Number(product.precio) || Number(product.precio_venta) || 1200; 
 
       return [...prev, {
         id: product.id,
         sku: product.sku,
         nombre: product.nombre,
         cantidad: 1,
-        precio_unitario: mockPrecioVenta,
-        precio_cobrado: mockPrecioVenta
+        precio_unitario: precioVenta,
+        precio_cobrado: precioVenta
       }];
     });
   };
 
   const updateQuantity = (sku: string, delta: number) => {
+    setFormError(null);
+    setFormSuccess(null);
+
     setCart(prev => prev.map(item => {
       if (item.sku === sku) {
         const productData = products.find(p => p.sku === sku);
         const newQty = Math.max(1, item.cantidad + delta);
         
-        if (productData && newQty > productData.stock_disponible) {
-          alert(`Stock límite alcanzado: ${productData.stock_disponible}`);
+        if (productData && newQty > (productData.stock_disponible || 0)) {
+          setFormError(`Stock límite alcanzado para ${productData.nombre}: ${productData.stock_disponible || 0} unidades.`);
           return item;
         }
 
@@ -119,16 +138,20 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
   };
 
   const removeFromCart = (sku: string) => {
+    setFormError(null);
+    setFormSuccess(null);
     setCart(prev => prev.filter(item => item.sku !== sku));
   };
 
   // 3. CÁLCULOS FINANCIEROS EN TIEMPO REAL
   const subtotal = cart.reduce((acc, item) => acc + item.precio_cobrado, 0);
-  const total = subtotal; // Aquí se aplicaría IVA o descuentos si el negocio lo requiere
+  const total = subtotal;
 
   // 4. INTEGRACIÓN REAL AL MOTOR PEPS CON CONTROL DE CONCURRENCIA Y CAÍDAS DE RED
   const handleConfirmSale = async () => {
     if (cart.length === 0 || isSubmitting) return;
+    setFormError(null);
+    setFormSuccess(null);
 
     const orderData: ERPOrder = {
       id_orden: '', // Se autogenera un nuevo ID en el servidor Firestore
@@ -150,12 +173,20 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
     try {
       setIsSubmitting(true);
       console.log('[QuickSale] Iniciando transacción PEPS en base de datos...');
-      await processPEPSSale(orderData);
-      alert(`Venta registrada exitosamente por C$ ${total.toLocaleString('es-NI')}\nMétodo: ${paymentMethod.toUpperCase()}`);
-      onClose(); // Cerrar el modal al finalizar con éxito
+      await onProcessPEPSSale(orderData);
+      setFormSuccess(`Venta registrada exitosamente por C$ ${total.toLocaleString('es-NI')} (Método: ${paymentMethod.toUpperCase()})`);
+      
+      // Reset cart and search
+      setCart([]);
+      setSearchTerm('');
+      
+      // Auto close after brief reading pause
+      setTimeout(() => {
+        onClose();
+      }, 1500);
     } catch (error: any) {
       console.error('[QuickSale] Error al procesar la venta en Firestore:', error);
-      alert(`Error al registrar la venta: ${error.message || 'Verifica tu conexión a Internet e inténtalo nuevamente.'}`);
+      setFormError(`Error al registrar la venta: ${error.message || 'Verifica tu conexión a Internet e inténtalo nuevamente.'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -182,7 +213,8 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
           </div>
           <button 
             onClick={onClose} 
-            className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-lg text-neutral-500 transition-colors"
+            disabled={isSubmitting}
+            className="p-2 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-lg text-neutral-500 transition-colors disabled:opacity-50"
             title="Cerrar (Esc)"
           >
             <X className="w-6 h-6" />
@@ -200,6 +232,7 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-600 dark:text-emerald-500" />
               <input 
                 ref={searchInputRef}
+                autoFocus
                 type="text" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -237,9 +270,12 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
                           {prod.sku}
                         </span>
                         <p className="font-bold text-sm mt-1">{prod.nombre}</p>
-                        <p className="text-xs text-neutral-500">{prod.marca} • Stock: {prod.stock_disponible}</p>
+                        <p className="text-xs text-neutral-500">{prod.marca} • Stock: {prod.stock_disponible || 0}</p>
                       </div>
-                      <button className="bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/50 dark:hover:bg-emerald-800 text-emerald-700 dark:text-emerald-400 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+                      <button 
+                        disabled={isSubmitting}
+                        className="bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/50 dark:hover:bg-emerald-800 text-emerald-700 dark:text-emerald-400 w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+                      >
                         <Plus className="w-4 h-4" />
                       </button>
                     </div>
@@ -256,12 +292,26 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
             <div className="flex-1 p-6 overflow-y-auto">
               <h3 className="text-xs font-bold uppercase tracking-widest text-neutral-500 mb-4 border-b border-neutral-200 dark:border-neutral-800 pb-2">Ticket de Venta</h3>
               
+              {formError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-lg flex items-start gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium mb-4 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              {formSuccess && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-start gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-4 animate-fadeIn">
+                  <CheckCircle className="w-4 h-4 shrink-0 text-emerald-500 mt-0.5" />
+                  <span>{formSuccess}</span>
+                </div>
+              )}
+
               {cart.length === 0 ? (
                 <p className="text-sm text-neutral-400 italic">El carrito está vacío.</p>
               ) : (
                 <div className="space-y-4">
                   {cart.map(item => (
-                    <div key={item.sku} className="flex flex-col gap-2">
+                    <div key={item.sku} className="flex flex-col gap-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800/80 p-3 rounded-lg shadow-sm">
                       <div className="flex justify-between items-start">
                         <div className="pr-4">
                           <p className="text-sm font-bold leading-tight">{item.nombre}</p>
@@ -272,28 +322,31 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
                         </p>
                       </div>
                       
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg p-1">
+                      <div className="flex justify-between items-center mt-2 border-t border-neutral-100 dark:border-neutral-800/60 pt-2">
+                        <div className="flex items-center gap-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-lg p-1">
                           <button 
+                            type="button"
                             onClick={() => updateQuantity(item.sku, -1)} 
                             disabled={isSubmitting}
-                            className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded text-neutral-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded text-neutral-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <span className="text-xs font-bold font-mono w-4 text-center">{item.cantidad}</span>
                           <button 
+                            type="button"
                             onClick={() => updateQuantity(item.sku, 1)} 
                             disabled={isSubmitting}
-                            className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded text-neutral-500 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded text-neutral-500 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         <button 
+                          type="button"
                           onClick={() => removeFromCart(item.sku)} 
                           disabled={isSubmitting}
-                          className="text-rose-500 hover:text-rose-600 p-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="text-rose-500 hover:text-rose-600 p-1 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -314,14 +367,14 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
                   <button 
                     onClick={() => setPaymentMethod('efectivo')}
                     disabled={isSubmitting}
-                    className={`py-2.5 rounded-lg border flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${paymentMethod === 'efectivo' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-500' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500'}`}
+                    className={`py-2.5 rounded-lg border flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${paymentMethod === 'efectivo' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-500' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500'}`}
                   >
                     <Banknote className="w-4 h-4" /> Efectivo
                   </button>
                   <button 
                     onClick={() => setPaymentMethod('transferencia')}
                     disabled={isSubmitting}
-                    className={`py-2.5 rounded-lg border flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${paymentMethod === 'transferencia' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 ring-1 ring-indigo-500' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500'}`}
+                    className={`py-2.5 rounded-lg border flex items-center justify-center gap-2 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${paymentMethod === 'transferencia' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 ring-1 ring-indigo-500' : 'border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 text-neutral-500'}`}
                   >
                     <CreditCard className="w-4 h-4" /> Transferencia
                   </button>
@@ -338,7 +391,7 @@ export const QuickSaleModal: React.FC<QuickSaleModalProps> = ({ onClose, product
               <button 
                 onClick={handleConfirmSale}
                 disabled={cart.length === 0 || isSubmitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-neutral-300 disabled:dark:bg-neutral-800 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg shadow-emerald-500/20"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-neutral-300 disabled:dark:bg-neutral-800 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg shadow-emerald-500/20 cursor-pointer"
               >
                 {isSubmitting ? (
                   <>

@@ -10,7 +10,7 @@ import { DashboardOverview } from './components/DashboardOverview';
 import { QuickSaleModal } from './components/QuickSaleModal';
 import { InventoryManagement } from './components/InventoryManagement';
 import { ERPProduct, InventoryBatch, ERPOrder, PettyCashTransaction } from './types/erp';
-import { createProduct, addInventoryBatch } from './services/inventoryService';
+import { createProduct, addInventoryBatch, processPEPSSale } from './services/inventoryService';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -251,6 +251,7 @@ export default function App() {
           <QuickSaleModal 
             onClose={() => setShowQuickSale(false)} 
             products={products}
+            onProcessPEPSSale={processPEPSSale}
           />
         )}
       </main>
