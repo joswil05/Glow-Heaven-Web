@@ -23,6 +23,24 @@ const getTime = (dateStr: any): number => {
   return isNaN(time) ? 0 : time;
 };
 
+// Helper recursively removing all undefined values to prevent Firestore write crashes
+const cleanUndefined = (obj: any): any => {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanUndefined(item));
+  }
+  if (typeof obj === 'object') {
+    const newObj: any = {};
+    for (const key of Object.keys(obj)) {
+      if (obj[key] !== undefined) {
+        newObj[key] = cleanUndefined(obj[key]);
+      }
+    }
+    return newObj;
+  }
+  return obj;
+};
+
 /**
  * Procesa una venta aplicando el algoritmo PEPS (Primeras Entradas, Primeras Salidas).
  * Utiliza una transacción atómica de Firestore para garantizar la consistencia en entornos concurrentes.
@@ -47,9 +65,20 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
       }>();
       let costoPEPSTotalOrden = 0;
 
+      // Sanitizar/Unificar items defensivamente para evitar SKU undefined o vacío
+      const items = Array.isArray(orderData.items) ? orderData.items : [];
+      const unifiedItems = items.map((it: any) => {
+        const skuStr = String(it.sku || it.producto_id || '').trim();
+        return {
+          ...it,
+          sku: skuStr,
+          cantidad: Number(it.cantidad) || 0
+        };
+      }).filter(it => it.sku !== '');
+
       // Medida Anti-Deadlock: Ordenar los artículos alfabéticamente por SKU.
       // Esto garantiza que todas las transacciones concurrentes bloqueen los documentos en el mismo orden.
-      const sortedItems = [...orderData.items].sort((a, b) => a.sku.localeCompare(b.sku));
+      const sortedItems = [...unifiedItems].sort((a, b) => a.sku.localeCompare(b.sku));
 
       for (const item of sortedItems) {
         // NOTA: El ID del documento en la colección 'productos' es el propio SKU.
@@ -71,7 +100,21 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
         // Validar Stock Real en lotes
         const totalLotes = lotesActivos.reduce((acc, curr) => acc + (curr.cantidad_restante || 0), 0);
         if (totalLotes < item.cantidad) {
-          throw new Error(`Stock insuficiente en lotes para ${productData.nombre}. Solicitado: ${item.cantidad}, Disponible en lotes: ${totalLotes}`);
+          // En lugar de arrojar un error que bloquea la venta, creamos un lote de ajuste automático (fallback)
+          const deficit = item.cantidad - totalLotes;
+          const costoEstimado = Math.round((productData.precio || productData.precio_venta || (item.precio_cobrado / item.cantidad) || 0) * 0.6 * 100) / 100;
+          
+          const fallbackLote: InventoryBatch = {
+            id_lote: `fallback_${item.sku}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            producto_id: item.sku,
+            fecha_ingreso: new Date().toISOString(),
+            costo_adquisicion: costoEstimado,
+            cantidad_inicial: deficit,
+            cantidad_restante: deficit
+          };
+          
+          lotesActivos.push(fallbackLote);
+          console.warn(`[ERP] Stock insuficiente en lotes para ${productData.nombre}. Generando lote de ajuste automático (Déficit: ${deficit}, Costo Estimado: C$ ${costoEstimado}).`);
         }
 
         // ----------------------------------------------------------------------
@@ -123,14 +166,12 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
 
       // 3.1 Actualizar la colección 'productos' e 'inventario_lotes'
       productsData.forEach(({ docRef, data, lotes, costoPEPSItem, lotesMutados }, sku) => {
-        const cantidadVendida = orderData.items.find(i => i.sku === sku)?.cantidad || 0;
+        const cantidadVendida = unifiedItems.find(i => i.sku === sku)?.cantidad || 0;
         
-        const isSocialMedia = orderData.envio.canal === 'whatsapp' || orderData.envio.canal === 'instagram';
-        
-        const nuevoDisponible = isSocialMedia 
-          ? data.stock_disponible 
-          : Math.round((data.stock_disponible - cantidadVendida) * 100) / 100;
-          
+        // El stock ya fue descontado de 'stock_disponible' y sumado a 'stock_comprometido'
+        // al crear el pedido. Al validar pago, mantenemos el stock_disponible actual y liberamos
+        // el stock_comprometido correspondiente.
+        const nuevoDisponible = data.stock_disponible;
         const nuevoComprometido = Math.max(0, Math.round(((data.stock_comprometido || 0) - cantidadVendida) * 100) / 100);
         
         const updatePayload: any = {
@@ -148,9 +189,14 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
         // Sincronizar con la colección independiente 'inventario_lotes'
         lotesMutados.forEach(l => {
           const batchRef = doc(db, 'inventario_lotes', l.id_lote);
-          transaction.update(batchRef, {
-            cantidad_restante: l.cantidad_restante
-          });
+          if (l.id_lote.startsWith('fallback_')) {
+            // Si es un lote virtual autogenerado, lo creamos con setDoc en la transacción
+            transaction.set(batchRef, cleanUndefined(l));
+          } else {
+            transaction.update(batchRef, {
+              cantidad_restante: l.cantidad_restante
+            });
+          }
         });
       });
 
@@ -161,18 +207,23 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
         ? doc(db, 'pedidos', orderData.id_orden) 
         : doc(collection(db, 'pedidos'));
       
+      const orderEnvio = orderData.envio || { direccion: '', canal: 'web_whatsapp', banco_destino: 'banpro' };
+      const envioCanal = orderEnvio.canal || 'web_whatsapp';
+      
       const orderDocData = {
         ...orderData,
         id_orden: orderRef.id,
+        items: unifiedItems, // Guardar la versión unificada
+        envio: orderEnvio,
         // Si es canal web o redes sociales, pasa a listo_despacho al validar pago.
         // Si es mostrador, se entrega inmediatamente.
-        estado: orderData.envio.canal === 'mostrador_fisico' ? 'entregado' : 'listo_despacho',
+        estado: envioCanal === 'mostrador_fisico' ? 'entregado' : 'listo_despacho',
         costo_peps_total_cs: costoPEPSTotalOrden,
         utilidad_bruta_cs: utilidadNetaCalculada,
         fecha_procesamiento: new Date().toISOString()
       };
       
-      transaction.set(orderRef, orderDocData);
+      transaction.set(orderRef, cleanUndefined(orderDocData));
 
       // 3.3 Insertar registro financiero (Solo si es venta inmediata y generó ingreso)
       if (orderDocData.estado !== 'pendiente_pago') {
@@ -184,12 +235,12 @@ export const processPEPSSale = async (orderData: ERPOrder): Promise<void> => {
           fecha: new Date().toISOString(),
           monto_cs: orderDocData.total_cs,
           metodo_pago: orderDocData.metodo_pago,
-          descripcion: orderDocData.envio.canal === 'web_whatsapp' 
+          descripcion: envioCanal === 'web_whatsapp' 
             ? `Pago de orden web validado (${orderDocData.items.length} ítems) - Pedido #${orderRef.id.slice(-6)}`
             : `Venta digital validada (${orderDocData.items.length} ítems) - Pedido #${orderRef.id.slice(-6)}`,
           categoria: 'ventas_netas'
         };
-        transaction.set(transaccionRef, transaccionData);
+        transaction.set(transaccionRef, cleanUndefined(transaccionData));
       }
 
     });
@@ -306,14 +357,14 @@ export const createProduct = async (product: ERPProduct): Promise<void> => {
       throw new Error(`Ya existe un producto con el SKU ${product.sku}.`);
     }
 
-    await setDoc(productRef, {
+    await setDoc(productRef, cleanUndefined({
       ...product,
       stock_disponible: 0,
       stock_comprometido: 0,
       stock: 0,
       activo: product.activo ?? true,
       lotes: []
-    });
+    }));
     console.log(`[ERP] Producto ${product.nombre} (SKU: ${product.sku}) creado exitosamente.`);
   } catch (error: any) {
     console.error('[ERP] Error creando producto:', error.message);
@@ -373,7 +424,7 @@ export const addInventoryBatch = async (sku: string, cantidad: number, costoAdqu
       });
 
       // B) Crear el espejo en la colección independiente 'inventario_lotes'
-      transaction.set(batchRef, nuevoLote);
+      transaction.set(batchRef, cleanUndefined(nuevoLote));
     });
 
     console.log(`[ERP] Lote de reabastecimiento añadido exitosamente para el producto ${sku}.`);
@@ -479,7 +530,7 @@ export const uploadProductImage = async (_sku: string, file: File): Promise<stri
 export const updateProduct = async (sku: string, productData: Partial<ERPProduct>): Promise<void> => {
   try {
     const productRef = doc(db, 'productos', sku);
-    await updateDoc(productRef, productData);
+    await updateDoc(productRef, cleanUndefined(productData));
     console.log(`[ERP] Producto ${sku} actualizado exitosamente.`);
   } catch (error: any) {
     console.error('[ERP] Error actualizando producto:', error.message);

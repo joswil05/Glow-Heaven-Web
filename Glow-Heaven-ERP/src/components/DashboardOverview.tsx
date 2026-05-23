@@ -7,6 +7,32 @@ import {
 } from 'lucide-react';
 import { PettyCashForm } from './PettyCashForm';
 
+// Helper functions for custom SVG charts rendering
+const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
+  const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+  return {
+    x: centerX + (radius * Math.cos(angleInRadians)),
+    y: centerY + (radius * Math.sin(angleInRadians))
+  };
+};
+
+const getArcPath = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
+  if (endAngle - startAngle <= 0) return '';
+  if (endAngle - startAngle >= 359.9) {
+    return `M ${x} ${y - radius} A ${radius} ${radius} 0 1 1 ${x - 0.01} ${y - radius}`;
+  }
+  const start = polarToCartesian(x, y, radius, endAngle);
+  const end = polarToCartesian(x, y, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+};
+
+const getBarPath = (x: number, y: number, w: number, h: number, r: number) => {
+  if (h <= 0) return '';
+  const realR = Math.min(r, h, w / 2);
+  return `M ${x},${y + h} L ${x},${y + realR} A ${realR},${realR} 0 0,1 ${x + realR},${y} L ${x + w - realR},${y} A ${realR},${realR} 0 0,1 ${x + w},${y + realR} L ${x + w},${y + h} Z`;
+};
+
 interface DashboardOverviewProps {
   products: ERPProduct[];
   batches: InventoryBatch[];
@@ -121,6 +147,78 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   }, [last7DaysData]);
 
   // --- 2. PAYMENT METHODS & CHANNELS BREAKDOWN ---
+  const channelBreakdown = useMemo(() => {
+    let webCount = 0;
+    let whatsappCount = 0;
+    let instagramCount = 0;
+    let counterCount = 0; // mostrador_fisico
+    
+    let webRevenue = 0;
+    let whatsappRevenue = 0;
+    let instagramRevenue = 0;
+    let counterRevenue = 0;
+    
+    let totalRevenue = 0;
+
+    if (Array.isArray(orders)) {
+      orders.forEach(o => {
+        if (!o || o.estado === 'cancelado' || o.estado === 'pendiente_pago') return;
+        const rev = Number(o.total_cs) || 0;
+        const canal = o.envio?.canal || 'web_whatsapp';
+        
+        totalRevenue += rev;
+        if (canal === 'web_whatsapp') {
+          webCount++;
+          webRevenue += rev;
+        } else if (canal === 'whatsapp') {
+          whatsappCount++;
+          whatsappRevenue += rev;
+        } else if (canal === 'instagram') {
+          instagramCount++;
+          instagramRevenue += rev;
+        } else if (canal === 'mostrador_fisico') {
+          counterCount++;
+          counterRevenue += rev;
+        }
+      });
+    }
+
+    return {
+      webCount, whatsappCount, instagramCount, counterCount,
+      webRevenue, whatsappRevenue, instagramRevenue, counterRevenue,
+      totalRevenue
+    };
+  }, [orders]);
+
+  const segments = useMemo(() => {
+    const { webRevenue, whatsappRevenue, instagramRevenue, counterRevenue, totalRevenue } = channelBreakdown;
+    
+    const data = [
+      { name: 'Catálogo Web', value: webRevenue, color: '#10b981' },
+      { name: 'WhatsApp', value: whatsappRevenue, color: '#22c55e' },
+      { name: 'Instagram', value: instagramRevenue, color: '#ec4899' },
+      { name: 'Mostrador', value: counterRevenue, color: '#6366f1' }
+    ];
+    
+    const total = totalRevenue > 0 ? totalRevenue : 1; // avoid divide by zero
+    let currentAngle = 0;
+    
+    return data.map(item => {
+      const percentage = totalRevenue > 0 ? (item.value / totalRevenue) : 0.25;
+      const angle = percentage * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+      currentAngle = endAngle;
+      
+      return {
+        ...item,
+        percentage,
+        startAngle,
+        endAngle
+      };
+    });
+  }, [channelBreakdown]);
+
   const paymentBreakdown = useMemo(() => {
     let cashCount = 0;
     let bankCount = 0;
@@ -242,28 +340,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     );
   }
 
-  // Draw sales line points
-  const width = 500;
+  // Chart dimensions & padding for SVG custom rendering
+  const width = 340;
   const height = 180;
-  const paddingX = 40;
-  const paddingY = 20;
-  const pointsSales = last7DaysData.map((d, i) => {
-    const x = paddingX + (i * (width - paddingX * 2)) / 6;
-    const y = height - paddingY - (d.sales / chartScales.maxVal) * (height - paddingY * 2);
-    return { x, y, sales: d.sales, profit: d.profit, label: d.dateStr };
-  });
-
-  const pointsProfit = last7DaysData.map((d, i) => {
-    const x = paddingX + (i * (width - paddingX * 2)) / 6;
-    const y = height - paddingY - (d.profit / chartScales.maxVal) * (height - paddingY * 2);
-    return { x, y };
-  });
-
-  const salesPath = pointsSales.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  const profitPath = pointsProfit.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  
-  const salesAreaPath = `${salesPath} L ${pointsSales[pointsSales.length - 1].x} ${height - paddingY} L ${pointsSales[0].x} ${height - paddingY} Z`;
-  const profitAreaPath = `${profitPath} L ${pointsProfit[pointsProfit.length - 1].x} ${height - paddingY} L ${pointsProfit[0].x} ${height - paddingY} Z`;
+  const paddingX = 35;
+  const paddingY = 15;
 
   return (
     <div className="flex-1 p-4 h-full flex flex-col min-h-0 relative bg-neutral-50 dark:bg-neutral-950 font-sans">
@@ -341,112 +422,182 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           
           {/* B1. PERFORMANCE CHARTS */}
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-sm flex flex-col min-h-0 relative">
-            <div className="flex justify-between items-center mb-3 shrink-0">
-              <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-500" /> Tendencia Operativa (Últimos 7 días)
-              </h2>
-              <div className="flex gap-4 text-[10px] font-mono">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span> Ventas</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-indigo-500 rounded-full"></span> Utilidad</span>
+            <div className="flex-1 w-full grid grid-cols-12 gap-4 min-h-0">
+              {/* Grouped Bar Chart (8 cols) */}
+              <div className="col-span-8 h-full flex flex-col relative min-h-0">
+                <div className="flex justify-between items-center mb-3 shrink-0">
+                  <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-500" /> Tendencia Operativa (Últimos 7 días)
+                  </h2>
+                  <div className="flex gap-4 text-[10px] font-mono">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-[#10b981] rounded-full"></span> Ventas</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-[#6366f1] rounded-full"></span> Utilidad</span>
+                  </div>
+                </div>
+                
+                {/* SVG Bar Chart Area */}
+                <div className="flex-1 w-full relative min-h-0 mt-1">
+                  <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+                    {/* Gridlines */}
+                    {[0, 1, 2, 3, 4].map((grid, index) => {
+                      const y = paddingY + (index * (height - paddingY * 2)) / 4;
+                      return (
+                        <g key={index}>
+                          <line x1={paddingX} y1={y} x2={width - 10} y2={y} stroke="#e5e5e5" strokeDasharray="3 3" className="dark:stroke-neutral-800"/>
+                          <text x={paddingX - 10} y={y + 3} textAnchor="end" className="fill-neutral-400 font-mono text-[8px]">
+                            {Math.round(chartScales.maxVal - (index * chartScales.maxVal) / 4).toLocaleString('es-NI', { notation: 'compact' })}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Draw X Axis labels */}
+                    {last7DaysData.map((d, i) => {
+                      const x = paddingX + (i * (width - paddingX - 10)) / 6;
+                      return (
+                        <text key={i} x={x} y={height - 4} textAnchor="middle" className="fill-neutral-400 font-mono text-[8px]">
+                          {d.dateStr}
+                        </text>
+                      );
+                    })}
+
+                    {/* Draw Grouped Bars */}
+                    {last7DaysData.map((d, i) => {
+                      const xCenter = paddingX + (i * (width - paddingX - 10)) / 6;
+                      const hSales = (d.sales / chartScales.maxVal) * (height - paddingY * 2);
+                      const hProfit = (d.profit / chartScales.maxVal) * (height - paddingY * 2);
+                      
+                      const xSales = xCenter - 11;
+                      const ySales = height - paddingY - hSales;
+                      const pathSales = getBarPath(xSales, ySales, 9, hSales, 2.5);
+
+                      const xProfit = xCenter + 2;
+                      const yProfit = height - paddingY - hProfit;
+                      const pathProfit = getBarPath(xProfit, yProfit, 9, hProfit, 2.5);
+
+                      const isHovered = activeTooltip?.label === d.dateStr;
+
+                      return (
+                        <g key={i} className="transition-all duration-300">
+                          {/* Ventas Bar */}
+                          {hSales > 0 && (
+                            <path 
+                              d={pathSales} 
+                              fill={isHovered ? '#059669' : '#10b981'} 
+                              className="transition-colors duration-200"
+                            />
+                          )}
+                          {/* Utilidad Bar */}
+                          {hProfit > 0 && (
+                            <path 
+                              d={pathProfit} 
+                              fill={isHovered ? '#4f46e5' : '#6366f1'} 
+                              className="transition-colors duration-200"
+                            />
+                          )}
+                        </g>
+                      );
+                    })}
+
+                    {/* Hover Hotspots for Tooltips */}
+                    {last7DaysData.map((d, i) => {
+                      const xCenter = paddingX + (i * (width - paddingX - 10)) / 6;
+                      const slotWidth = (width - paddingX - 10) / 6;
+                      const xStart = xCenter - slotWidth / 2;
+                      
+                      return (
+                        <rect
+                          key={i}
+                          x={xStart}
+                          y={paddingY}
+                          width={slotWidth}
+                          height={height - paddingY * 2}
+                          fill="transparent"
+                          className="cursor-pointer"
+                          onMouseEnter={() => {
+                            setActiveTooltip({
+                              x: xCenter,
+                              y: height - paddingY - Math.max((d.sales / chartScales.maxVal) * (height - paddingY * 2), (d.profit / chartScales.maxVal) * (height - paddingY * 2)) - 40,
+                              label: d.dateStr,
+                              sales: d.sales,
+                              profit: d.profit
+                            });
+                          }}
+                          onMouseLeave={() => setActiveTooltip(null)}
+                        />
+                      );
+                    })}
+                  </svg>
+
+                  {/* Tooltip Overlay */}
+                  {activeTooltip && (
+                    <div 
+                      className="absolute bg-white/95 dark:bg-neutral-900/95 border border-neutral-200 dark:border-neutral-800 p-2.5 rounded-lg shadow-lg text-[10px] font-mono z-20 pointer-events-none transition-all duration-150"
+                      style={{ left: activeTooltip.x - 50, top: activeTooltip.y }}
+                    >
+                      <p className="font-bold text-neutral-800 dark:text-neutral-200 border-b border-neutral-100 dark:border-neutral-850 pb-1 mb-1">{activeTooltip.label}</p>
+                      <p className="text-emerald-600">Ventas: C$ {activeTooltip.sales.toLocaleString('es-NI')}</p>
+                      <p className="text-indigo-650">Utilidad: C$ {activeTooltip.profit.toLocaleString('es-NI')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Doughnut Chart (4 cols) */}
+              <div className="col-span-4 h-full flex flex-col relative min-h-0 border-l border-neutral-100 dark:border-neutral-800 pl-4 justify-between">
+                <div className="shrink-0 mb-1">
+                  <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-500" /> Distribución por Canal
+                  </h2>
+                </div>
+
+                <div className="flex-1 w-full flex items-center justify-center relative min-h-0">
+                  <svg width="140" height="140" viewBox="0 0 160 160" className="overflow-visible">
+                    {/* Background Ring */}
+                    <circle cx="80" cy="80" r="52" fill="none" stroke="#f3f4f6" strokeWidth="13" className="dark:stroke-neutral-800/60" />
+                    
+                    {/* Segments */}
+                    {segments.map((seg, idx) => (
+                      <path
+                        key={idx}
+                        d={getArcPath(80, 80, 52, seg.startAngle + (seg.percentage > 0.05 ? 2.5 : 0), seg.endAngle - (seg.percentage > 0.05 ? 2.5 : 0))}
+                        fill="none"
+                        stroke={seg.color}
+                        strokeWidth="14"
+                        strokeLinecap="round"
+                        className="transition-all duration-300 hover:stroke-[16px] cursor-pointer"
+                        style={{ transformOrigin: '80px 80px' }}
+                      />
+                    ))}
+
+                    {/* Center Text */}
+                    <text x="80" y="76" textAnchor="middle" className="fill-neutral-400 font-mono text-[9px] font-bold tracking-widest">
+                      TOTAL
+                    </text>
+                    <text x="80" y="93" textAnchor="middle" className="fill-neutral-800 dark:fill-white font-mono text-[12px] font-bold">
+                      C$ {channelBreakdown.totalRevenue.toLocaleString('es-NI', { notation: 'compact' })}
+                    </text>
+                  </svg>
+                </div>
+
+                {/* Legend list */}
+                <div className="flex flex-col gap-1 w-full text-[9px] font-mono shrink-0">
+                  {segments.map((seg, idx) => (
+                    <div key={idx} className="flex justify-between items-center px-1.5 py-0.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-850/40 transition-colors">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: seg.color }}></span>
+                        <span className="text-neutral-550 dark:text-neutral-350 font-bold">{seg.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-neutral-450 font-semibold mr-1.5">{Math.round(seg.percentage * 100)}%</span>
+                        <span className="text-neutral-700 dark:text-neutral-200 font-bold">C$ {seg.value.toLocaleString('es-NI', { notation: 'compact' })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            
-            {/* SVG Chart area */}
-            <div className="flex-1 w-full relative min-h-0 mt-1">
-              <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.25"/>
-                    <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
-                  </linearGradient>
-                  <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25"/>
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0"/>
-                  </linearGradient>
-                </defs>
-
-                {/* Gridlines */}
-                {[0, 1, 2, 3, 4].map((grid, index) => {
-                  const y = paddingY + (index * (height - paddingY * 2)) / 4;
-                  return (
-                    <g key={index}>
-                      <line x1={paddingX} y1={y} x2={width - paddingX} y2={y} stroke="#e5e5e5" strokeDasharray="3 3" className="dark:stroke-neutral-800"/>
-                      <text x={paddingX - 10} y={y + 3} textAnchor="end" className="fill-neutral-400 font-mono text-[8px]">
-                        {(chartScales.maxVal - (index * chartScales.maxVal) / 4).toLocaleString('es-NI', { notation: 'compact' })}
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* Draw X Axis labels */}
-                {last7DaysData.map((d, i) => {
-                  const x = paddingX + (i * (width - paddingX * 2)) / 6;
-                  return (
-                    <text key={i} x={x} y={height - 4} textAnchor="middle" className="fill-neutral-400 font-mono text-[8px]">
-                      {d.dateStr}
-                    </text>
-                  );
-                })}
-
-                {/* Areas */}
-                <path d={salesAreaPath} fill="url(#salesGrad)" />
-                <path d={profitAreaPath} fill="url(#profitGrad)" />
-
-                {/* Paths */}
-                <path d={salesPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d={profitPath} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-
-                {/* Node Circles */}
-                {pointsSales.map((p, i) => (
-                  <circle 
-                    key={i} 
-                    cx={p.x} 
-                    cy={p.y} 
-                    r="4" 
-                    fill="#10b981" 
-                    stroke="#ffffff" 
-                    strokeWidth="1.5"
-                    className="cursor-pointer hover:r-5 transition-all"
-                    onMouseEnter={(e) => setActiveTooltip({
-                      x: p.x,
-                      y: p.y,
-                      label: p.label,
-                      sales: p.sales,
-                      profit: p.profit
-                    })}
-                    onMouseLeave={() => setActiveTooltip(null)}
-                  />
-                ))}
-
-                {pointsProfit.map((p, i) => (
-                  <circle 
-                    key={i} 
-                    cx={p.x} 
-                    cy={p.y} 
-                    r="4" 
-                    fill="#6366f1" 
-                    stroke="#ffffff" 
-                    strokeWidth="1.5"
-                    className="cursor-pointer hover:r-5 transition-all"
-                  />
-                ))}
-              </svg>
-
-              {/* Tooltip Overlay */}
-              {activeTooltip && (
-                <div 
-                  className="absolute bg-white/95 dark:bg-neutral-900/95 border border-neutral-200 dark:border-neutral-800 p-2.5 rounded-lg shadow-lg text-[10px] font-mono z-20 pointer-events-none"
-                  style={{ left: activeTooltip.x - 50, top: activeTooltip.y - 85 }}
-                >
-                  <p className="font-bold text-neutral-800 dark:text-neutral-200 border-b border-neutral-100 dark:border-neutral-800 pb-1 mb-1">{activeTooltip.label}</p>
-                  <p className="text-emerald-600">Ventas: C$ {activeTooltip.sales.toLocaleString('es-NI')}</p>
-                  <p className="text-indigo-600">Utilidad: C$ {activeTooltip.profit.toLocaleString('es-NI')}</p>
-                </div>
-              )}
-            </div>
           </div>
-
-          {/* B2. RECENT FINANCIAL ACTIVITY LEDGER */}
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl flex flex-col min-h-0 flex-1 shadow-sm overflow-hidden">
             <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950/40 flex justify-between items-center shrink-0">
               <h2 className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-2">
