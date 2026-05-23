@@ -1,0 +1,16 @@
+# Node dependencies
+node_modules/
+
+# Frontend builds
+dist/
+build/
+
+# Rust/Tauri builds
+target/
+src-tauri/target/
+src-tauri/binaries/
+
+# Environment files
+.env*
+*.local
+*.log
