@@ -6,11 +6,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, CartItem, Order, OrderItem, ClientData, PaymentMethod, OrderStatus } from '../types';
 import { db, isFirebaseConfigured, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, onSnapshot, doc, setDoc, writeBatch } from 'firebase/firestore';
-import { INITIAL_PRODUCTS } from '../data/perfumes';
+import { collection, onSnapshot, doc, setDoc, writeBatch, runTransaction, Timestamp } from 'firebase/firestore';
+import { INITIAL_PRODUCTS } from '../data/productos';
 
 interface CartContextProps {
   products: Product[];
+  productsLoading: boolean;
   cart: CartItem[];
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
@@ -28,6 +29,7 @@ const CartContext = createContext<CartContextProps | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('glow_heaven_cart');
     return saved ? JSON.parse(saved) : [];
@@ -41,31 +43,36 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("Firebase Active. Setting up live product stream...");
       const path = 'productos';
       const unsubscribe = onSnapshot(
-        collection(db, path),
-        (snapshot) => {
-          if (snapshot.empty) {
-            // Seed products if Firestore collection is completely empty
-            console.log("Firestore 'productos' collection is empty. Seeding INITIAL_PRODUCTS...");
-            const batch = writeBatch(db);
-            INITIAL_PRODUCTS.forEach((prod) => {
-              const docRef = doc(db, 'productos', prod.id);
-              batch.set(docRef, prod);
-            });
-            batch.commit().catch((err) => {
-              console.error("Error seeding initial products to Firestore:", err);
-            });
-          } else {
-            const list: Product[] = [];
-            snapshot.forEach((doc) => {
-              list.push({ id: doc.id, ...doc.data() } as Product);
-            });
-            setProducts(list.filter(p => p.activo !== false));
+          collection(db, path),
+          (snapshot) => {
+            if (snapshot.empty) {
+              // Seed products if Firestore collection is completely empty
+              console.log("Firestore 'productos' collection is empty. Seeding INITIAL_PRODUCTS...");
+              const batch = writeBatch(db);
+              INITIAL_PRODUCTS.forEach((prod) => {
+                const docRef = doc(db, 'productos', prod.id);
+                batch.set(docRef, prod);
+              });
+              batch.commit().then(() => {
+                setProductsLoading(false);
+              }).catch((err) => {
+                console.error("Error seeding initial products to Firestore:", err);
+                setProductsLoading(false);
+              });
+            } else {
+              const list: Product[] = [];
+              snapshot.forEach((doc) => {
+                list.push({ id: doc.id, ...doc.data() } as Product);
+              });
+              setProducts(list.filter(p => p.activo !== false));
+              setProductsLoading(false);
+            }
+          },
+          (error) => {
+            setProductsLoading(false);
+            // CRITICAL: Always handle firestore error as instructed in standard guidelines
+            handleFirestoreError(error, OperationType.GET, path);
           }
-        },
-        (error) => {
-          // CRITICAL: Always handle firestore error as instructed in standard guidelines
-          handleFirestoreError(error, OperationType.GET, path);
-        }
       );
       return () => unsubscribe();
     } else {
@@ -78,6 +85,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('glow_heaven_products', JSON.stringify(INITIAL_PRODUCTS));
         setProducts(INITIAL_PRODUCTS);
       }
+      setProductsLoading(false);
     }
   }, [isFirebaseActive]);
 
@@ -163,6 +171,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       precio_unitario: item.product.precio,
     }));
 
+    // Generate expiration time (30 minutes from now)
+    const expirationDate = new Date();
+    expirationDate.setMinutes(expirationDate.getMinutes() + 30);
+
     const newOrder: Order = {
       id_pedido: orderId,
       fecha: new Date().toISOString(),
@@ -171,32 +183,59 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       total: cartTotal,
       metodo_pago: paymentMethod,
       estado: OrderStatus.PENDIENTE,
+      expiraEn: isFirebaseActive 
+        ? Timestamp.fromDate(expirationDate)
+        : expirationDate.toISOString(),
     };
 
     if (isFirebaseActive) {
-      // Create write batch to set the order and update stock atomicity
-      const batchPath = `pedidos-productos-batch`;
+      const transactionPath = `pedidos-productos-transaction`;
       try {
-        const batch = writeBatch(db);
+        await runTransaction(db, async (transaction) => {
+          // 1. Fetch latest product documents inside the transaction to get real-time stock
+          const productDocs = await Promise.all(
+            cart.map(async (item) => {
+              const productRef = doc(db, 'productos', item.product.id);
+              const productSnapshot = await transaction.get(productRef);
+              if (!productSnapshot.exists()) {
+                throw new Error(`El producto "${item.product.nombre}" no existe en la base de datos.`);
+              }
+              const dbProductData = productSnapshot.data() as Product;
+              return {
+                item,
+                ref: productRef,
+                currentStock: dbProductData.stock ?? 0,
+              };
+            })
+          );
 
-        // A) Create 'pedidos' document with unique doc ID matching its id_pedido for external real-time sync
-        const orderRef = doc(db, 'pedidos', orderId);
-        batch.set(orderRef, newOrder);
+          // 2. Validate all stocks before performing any writes
+          for (const p of productDocs) {
+            if (p.currentStock < p.item.quantity) {
+              throw new Error(`¡Agotado! Lo sentimos, no hay stock suficiente de "${p.item.product.nombre}". Disponible: ${p.currentStock} u., solicitado: ${p.item.quantity} u.`);
+            }
+          }
 
-        // B) Decrement stock for purchased items
-        cart.forEach((item) => {
-          const productRef = doc(db, 'productos', item.product.id);
-          const liveProd = products.find((p) => p.id === item.product.id);
-          const currentStock = liveProd ? liveProd.stock : item.product.stock;
-          const updatedStock = Math.max(0, currentStock - item.quantity);
-          batch.update(productRef, { stock: updatedStock });
+          // 3. Create the order
+          const orderRef = doc(db, 'pedidos', orderId);
+          transaction.set(orderRef, newOrder);
+
+          // 4. Update product stocks
+          for (const p of productDocs) {
+            const updatedStock = p.currentStock - p.item.quantity;
+            transaction.update(p.ref, { stock: updatedStock });
+          }
         });
 
-        await batch.commit();
-        console.log("Order written to Firestore with atomic stock updates!");
-      } catch (error) {
+        console.log("Order written to Firestore with atomic stock updates via Transaction!");
+      } catch (error: any) {
         // ENFORCE SKILL CRITICAL EXCEPTION BINDINGS
-        handleFirestoreError(error, OperationType.WRITE, batchPath);
+        // Check if it's a customer-facing stock error, if so pass it through, else use firestore handler
+        if (error.message && (error.message.includes("¡Agotado!") || error.message.includes("no existe"))) {
+          throw error;
+        } else {
+          handleFirestoreError(error, OperationType.WRITE, transactionPath);
+        }
       }
     } else {
       // Local Mode: Write to local orders log and update local products stock
@@ -271,6 +310,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <CartContext.Provider
       value={{
         products,
+        productsLoading,
         cart,
         addToCart,
         removeFromCart,

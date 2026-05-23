@@ -14,21 +14,21 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({ onScrollToCatalog, onOpenQuiz }) => {
   return (
-    <section className="relative min-h-[80vh] flex flex-col md:flex-row border-b border-editorial-black/10">
+    <section className="relative min-h-[75vh] flex flex-col md:flex-row border-b border-editorial-black/10">
       
       {/* Editorial Left Column / Creative Pane */}
-      <div className="w-full md:w-1/2 bg-editorial-sand flex flex-col justify-center px-8 sm:px-16 py-12 md:py-20 relative overflow-hidden">
+      <div className="w-full md:w-1/2 bg-editorial-sand flex flex-col justify-center px-6 sm:px-12 md:px-16 py-12 md:py-20 relative overflow-hidden">
         {/* Absolute Season Indicator */}
-        <div className="absolute top-8 left-8 sm:left-16 text-[10px] uppercase tracking-[0.3em] text-editorial-black/40 font-mono font-bold">
+        <div className="absolute top-6 left-6 sm:top-8 sm:left-12 md:left-16 text-[9px] sm:text-[10px] uppercase tracking-[0.3em] text-editorial-black/40 font-mono font-bold">
           Colección de Estación • 2026
         </div>
 
-        <div className="max-w-md mt-6">
+        <div className="max-w-md mt-6 sm:mt-8">
           <motion.h1
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="text-6xl sm:text-7xl font-serif leading-[0.95] tracking-tight text-editorial-black mb-6"
+            className="text-4xl sm:text-6xl md:text-7xl font-serif leading-[1] md:leading-[0.95] tracking-tight text-editorial-black mb-5"
           >
             Firma <br />
             <span className="italic font-normal">Invisible</span>
@@ -38,7 +38,7 @@ export const Hero: React.FC<HeroProps> = ({ onScrollToCatalog, onOpenQuiz }) => 
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15 }}
-            className="text-sm sm:text-base leading-relaxed text-editorial-black/70 mb-8 font-light"
+            className="text-xs sm:text-[15px] leading-relaxed text-editorial-black/70 mb-8 font-light"
           >
             Descubre una selección exquisita de tesoros olfativos diseñados para elevar tu aura y trascender el tiempo. Materias primas cultivadas en Grasse y fundidas en tu piel.
           </motion.p>
@@ -47,28 +47,32 @@ export const Hero: React.FC<HeroProps> = ({ onScrollToCatalog, onOpenQuiz }) => 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="flex flex-col sm:flex-row gap-3.5"
+            className="flex flex-col sm:flex-row gap-3"
           >
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02, backgroundColor: '#222' }}
+              whileTap={{ scale: 0.98 }}
               onClick={onScrollToCatalog}
-              className="px-8 py-4 bg-editorial-black text-editorial-ivory hover:bg-editorial-black/90 text-[10px] uppercase tracking-widest font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-7 py-4 bg-editorial-black text-editorial-ivory text-[10px] sm:text-xs uppercase tracking-widest font-bold transition-all cursor-pointer flex items-center justify-center gap-2 hover:shadow-md"
             >
               Explorar Catálogo
               <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02, backgroundColor: 'rgba(0,0,0,0.05)' }}
+              whileTap={{ scale: 0.98 }}
               onClick={onOpenQuiz}
-              className="px-8 py-4 border border-editorial-black hover:bg-editorial-black hover:text-editorial-ivory text-editorial-black text-[10px] uppercase tracking-widest font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-7 py-4 border border-editorial-black text-editorial-black text-[10px] sm:text-xs uppercase tracking-widest font-bold transition-all cursor-pointer flex items-center justify-center gap-2 hover:shadow-sm"
             >
               Encontrar Mi Esencia (Quiz)
-            </button>
+            </motion.button>
           </motion.div>
         </div>
 
-        <div className="mt-12 sm:mt-16 flex items-center gap-4">
-          <div className="w-12 h-[1px] bg-editorial-black/50"></div>
-          <span className="text-[10px] uppercase tracking-widest italic text-editorial-black/60">Esencias De Distinción</span>
+        <div className="mt-10 sm:mt-16 flex items-center gap-4">
+          <div className="w-10 h-[1px] bg-editorial-black/40"></div>
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest italic text-editorial-black/55">Esencias De Distinción</span>
         </div>
       </div>
 

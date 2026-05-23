@@ -39,9 +39,10 @@
         },
         "total": { "type": "number" },
         "metodo_pago": { "type": "string", "enum": ["Efectivo", "Transferencia", "Tarjeta"] },
-        "estado": { "type": "string", "enum": ["Pendiente", "Completado", "Cancelado"] }
+        "estado": { "type": "string", "enum": ["Pendiente de Pago", "Completado", "Cancelado"] },
+        "expiraEn": { "type": "object", "description": "Firestore Timestamp representing expiration date (30 mins from creation)" }
       },
-      "required": ["id_pedido", "fecha", "cliente", "items", "total", "metodo_pago", "estado"]
+      "required": ["id_pedido", "fecha", "cliente", "items", "total", "metodo_pago", "estado", "expiraEn"]
     }
   },
   "firestore": {

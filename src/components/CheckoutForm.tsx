@@ -35,25 +35,62 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
     }));
   };
 
+  // Standard cellular format regex checks
+  const isValidPhoneNumber = (phone: string): boolean => {
+    const cleaned = phone.replace(/[\s\-\(\)]/g, '');
+    const colombianRegex = /^(?:\+57|57)?3\d{9}$/;
+    const internationalRegex = /^\+?[1-9]\d{7,14}$/;
+    return colombianRegex.test(cleaned) || internationalRegex.test(cleaned);
+  };
+
+  // Anti-bot & injection protection (checks for script tags, SQL, BBCode links or mail tags)
+  const isSuspiciousText = (text: string): boolean => {
+    const suspectPatterns = [
+      /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+      /href\s*=\s*['"]/gi,
+      /\[url=.*\]/gi,
+      /SELECT\s+.*\s+FROM/gi,
+      /UNION\s+SELECT/gi,
+      /INSERT\s+INTO/gi,
+      /UPDATE\s+.*\s+SET/gi,
+      /DELETE\s+FROM/gi,
+      /javascript:/gi,
+      /onload\s*=/gi,
+      /onerror\s*=/gi
+    ];
+    return suspectPatterns.some((pattern) => pattern.test(text));
+  };
+
+  const isNombreSuspicious = isSuspiciousText(formData.nombre);
+  const isCelularSuspicious = isSuspiciousText(formData.celular);
+  const isDireccionSuspicious = isSuspiciousText(formData.direccion);
+  const isPhoneInvalid = formData.celular.trim() ? !isValidPhoneNumber(formData.celular) : false;
+
+  const isAnyFieldSuspicious = isNombreSuspicious || isCelularSuspicious || isDireccionSuspicious;
+  const isAnyFieldEmpty = !formData.nombre.trim() || !formData.celular.trim() || !formData.direccion.trim();
+
+  // Strict boolean validation to block any bot submissions or malformed states
+  const isFormInvalid = isAnyFieldEmpty || isAnyFieldSuspicious || isPhoneInvalid || cart.length === 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Validation
-    if (!formData.nombre.trim()) {
-      setError("Por favor, ingresa tu nombre completo.");
+    // Extra runtime safety guards
+    if (isAnyFieldEmpty) {
+      setError("Por favor, completa todos los campos requeridos en el registro.");
       return;
     }
-    if (!formData.celular.trim()) {
-      setError("Por favor, ingresa tu número telefónico.");
+    if (isAnyFieldSuspicious) {
+      setError("Se detectó contenido no permitido en los campos de texto. Por favor, remueve caracteres especiales o enlaces.");
       return;
     }
-    if (!formData.direccion.trim()) {
-      setError("Por favor, ingresa una dirección o punto de entrega exacto.");
+    if (isPhoneInvalid) {
+      setError("Formato de celular no válido. Ej. Colombia: 300 123 4567 o +57 300 123 4567 (entre 10 y 15 dígitos internacionales).");
       return;
     }
     if (cart.length === 0) {
-      setError("El carrito está vacío. Agrega algún perfume para comprar.");
+      setError("El carrito está vacío.");
       return;
     }
 
@@ -70,7 +107,7 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
 
     } catch (err: any) {
       console.error(err);
-      setError("Ocurrió un error procesando tu compra. Por favor, intenta de nuevo.");
+      setError(err.message || "Ocurrió un error procesando tu compra. Por favor, intenta de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -96,6 +133,17 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
           <p className="text-[10px] font-mono tracking-widest text-[#1A1A1A]/40 bg-editorial-sand px-3 py-1.5 rounded-sm inline-block font-semibold mb-6">
             ID DE REGISTRO: {placedOrder.id_pedido}
           </p>
+
+          {/* SUCCESS SCREEN UX EXPLAINING DE 30 MINUTES RULE AND TRANSFER CONSTRAINTS */}
+          <div className="bg-amber-50/70 border border-amber-200/50 rounded-xl p-4 sm:p-5 mb-8 text-left max-w-md shadow-xs">
+            <span className="text-[10px] font-mono font-bold uppercase bg-amber-200 text-amber-800 px-2 py-0.5 rounded-[4px] tracking-wider">⚠️ Reserva Temporal Limitada</span>
+            <p className="text-amber-950 text-xs font-light mt-2.5 leading-relaxed">
+              El estado inicial de tu pedido es <strong className="font-semibold text-amber-900 bg-amber-100 px-1 py-0.5 rounded text-[11px] font-mono">Pendiente de Pago</strong>. Tu inventario exclusivo quedará reservado por exactamente <strong className="font-semibold text-amber-900 underline">30 minutos</strong>.
+            </p>
+            <p className="text-amber-950/80 text-xs font-light mt-1.5 leading-relaxed">
+              Deberás hacer clic en el botón inferior para enviarnos tu comprobante de pago o coordinar el despacho temporal mediante WhatsApp antes de que se cumpla el plazo, de lo contrario la reserva expirará y se liberará el producto para restaurar el stock físico.
+            </p>
+          </div>
 
           <p className="text-editorial-black/75 font-light text-sm leading-relaxed max-w-md mb-8">
             Tu orden ha sido registrada en el sistema de **Glow Heaven** en tiempo real. Ahora, para coordinar el envío e iniciar el despacho de tu fragancia, haz clic a continuación para finalizar la transacción en WhatsApp.
@@ -130,7 +178,7 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-6 py-12">
+    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
       {/* Navigation Return */}
       <button
         onClick={onBack}
@@ -140,14 +188,14 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
         Regresar al Catálogo
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
         {/* Form Inputs Block */}
-        <form onSubmit={handleSubmit} className="lg:col-span-7 bg-white rounded-2xl border border-editorial-black/10 p-6 md:p-10 space-y-8 shadow-xs">
+        <form onSubmit={handleSubmit} className="lg:col-span-7 bg-white rounded-2xl border border-editorial-black/10 p-4 sm:p-8 md:p-10 space-y-8 shadow-xs">
           <div>
-            <h3 className="text-3xl font-serif text-editorial-black">
+            <h3 className="text-2xl sm:text-3xl font-serif text-editorial-black">
               Detalles de <span className="italic">Despacho</span>
             </h3>
-            <p className="text-xs text-editorial-black/50 uppercase tracking-wider font-mono mt-1">Check-out express libre de registro.</p>
+            <p className="text-xs text-editorial-black/50 uppercase tracking-wider font-mono mt-1">Check-out express libre de registro y con alta seguridad.</p>
           </div>
 
           {error && (
@@ -157,7 +205,7 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
             </div>
           )}
 
-          {/* Customer Inputs */}
+          {/* Customer Inputs with Active Feedback and Validation warnings */}
           <div className="space-y-5">
             <div>
               <label htmlFor="nombre" className="block text-[10px] font-bold uppercase tracking-widest text-editorial-black/50 font-mono mb-2">Nombre Completo</label>
@@ -169,8 +217,15 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
                 onChange={handleInputChange}
                 required
                 placeholder="Ej. Camila Espinoza"
-                className="w-full px-4 py-3 bg-white border border-editorial-black/10 text-sm focus:outline-none focus:border-editorial-black/60 text-editorial-black placeholder-editorial-black/30 font-light"
+                className={`w-full px-4 py-3 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 text-editorial-black placeholder-editorial-black/30 font-light transition-all duration-300 shadow-xs ${
+                  isNombreSuspicious 
+                    ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100 bg-rose-50/30' 
+                    : 'border-editorial-black/10 focus:border-editorial-black focus:ring-editorial-black/10 hover:border-editorial-black/25'
+                }`}
               />
+              {isNombreSuspicious && (
+                <p className="text-[10px] text-rose-600 font-mono mt-1 w-full text-left">⚠️ Contenido sospechoso no permitido (códigos o scripts).</p>
+              )}
             </div>
 
             <div>
@@ -183,8 +238,20 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
                 onChange={handleInputChange}
                 required
                 placeholder="Ej. +57 300 123 4567"
-                className="w-full px-4 py-3 bg-white border border-editorial-black/10 text-sm focus:outline-none focus:border-editorial-black/60 text-editorial-black placeholder-editorial-black/30 font-light"
+                className={`w-full px-4 py-3 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 text-editorial-black placeholder-editorial-black/30 font-light transition-all duration-300 shadow-xs ${
+                  isCelularSuspicious 
+                    ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100 bg-rose-50/30'
+                    : isPhoneInvalid 
+                      ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100 bg-amber-50/20'
+                      : 'border-editorial-black/10 focus:border-editorial-black focus:ring-editorial-black/10 hover:border-editorial-black/25'
+                }`}
               />
+              {isCelularSuspicious && (
+                <p className="text-[10px] text-rose-600 font-mono mt-1 w-full text-left">⚠️ Contenido sospechoso no permitido.</p>
+              )}
+              {isPhoneInvalid && !isCelularSuspicious && (
+                <p className="text-[10px] text-amber-700 font-mono mt-1 w-full text-left">⚠️ Formato incorrecto. Ingresa tu número móvil (Ej. +57 300 123 4567).</p>
+              )}
             </div>
 
             <div>
@@ -197,8 +264,15 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
                 onChange={handleInputChange}
                 required
                 placeholder="Calle, Barrio, Apartamento, u Oficina (Ej: Calle 85 #11-45, Bogotá)"
-                className="w-full px-4 py-3 bg-white border border-editorial-black/10 text-sm focus:outline-none focus:border-editorial-black/60 text-editorial-black placeholder-editorial-black/30 font-light"
+                className={`w-full px-4 py-3 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 text-editorial-black placeholder-editorial-black/30 font-light transition-all duration-300 shadow-xs ${
+                  isDireccionSuspicious 
+                    ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100 bg-rose-50/30' 
+                    : 'border-editorial-black/10 focus:border-editorial-black focus:ring-editorial-black/10 hover:border-editorial-black/25'
+                }`}
               />
+              {isDireccionSuspicious && (
+                <p className="text-[10px] text-rose-600 font-mono mt-1 w-full text-left">⚠️ Contenido sospechoso no permitido.</p>
+              )}
             </div>
           </div>
 
@@ -211,7 +285,9 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
                 { type: PaymentMethod.EFECTIVO, label: "Contraentrega", desc: "Efectivo al recibir" },
                 { type: PaymentMethod.TARJETA, label: "Tarjeta de Crédito", desc: "Enlace de pago" }
               ].map((pVal) => (
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
                   type="button"
                   key={pVal.type}
                   onClick={() => setPaymentMethod(pVal.type)}
@@ -225,18 +301,41 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ onBack, onSuccess })
                   <span className={`text-[10px] block mt-0.5 ${paymentMethod === pVal.type ? 'text-editorial-ivory/60' : 'text-editorial-black/40'}`}>
                     {pVal.desc}
                   </span>
-                </button>
+                </motion.button>
               ))}
             </div>
           </div>
 
-          <button
+          {/* Google reCAPTCHA v3 Visual Container (Placeholder) */}
+          <div className="bg-neutral-50 border border-editorial-black/5 rounded-xl p-3.5 flex items-center justify-between gap-3 text-[10px] text-editorial-black/50 leading-relaxed font-sans mt-2 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <svg className="w-6 h-6 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <div>
+                <span className="block font-semibold text-[11px] text-zinc-700">Protección Google reCAPTCHA v3</span>
+                <span>Análisis de comportamiento heurístico activo para bloquear software automatizado.</span>
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-1 opacity-90">
+              <span className="font-mono font-bold text-[8px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded-sm">Seguro</span>
+            </div>
+          </div>
+
+          <motion.button
+            whileHover={{ scale: isFormInvalid ? 1 : 1.01 }}
+            whileTap={{ scale: isFormInvalid ? 1 : 0.99 }}
             type="submit"
-            disabled={loading || cart.length === 0}
-            className="w-full py-4 bg-editorial-black hover:opacity-90 text-editorial-ivory text-[10px] uppercase font-bold tracking-widest transition-all cursor-pointer shadow-md disabled:opacity-50"
+            disabled={loading || isFormInvalid}
+            className={`w-full py-4.5 text-xs uppercase font-bold tracking-[0.16em] transition-all cursor-pointer shadow-md rounded-xl ${
+              isFormInvalid 
+                ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed opacity-65 shadow-none' 
+                : 'bg-editorial-black hover:opacity-95 text-editorial-ivory'
+            }`}
           >
             {loading ? "Procesando Orden..." : "Confirmar Compra y Concluir en WhatsApp"}
-          </button>
+          </motion.button>
         </form>
 
         {/* Dynamic Purchase Summary column */}

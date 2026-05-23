@@ -39,7 +39,10 @@ service cloud.firestore {
         && request.resource.data.items.size() > 0
         && request.resource.data.total is number
         && request.resource.data.total > 0
-        && request.resource.data.estado == "Pendiente";
+        && request.resource.data.estado == "Pendiente de Pago"
+        && request.resource.data.expiraEn is timestamp
+        && request.resource.data.expiraEn >= request.time + duration.value(29, 'm')
+        && request.resource.data.expiraEn <= request.time + duration.value(31, 'm');
         
       allow read, update, delete: if false;
     }

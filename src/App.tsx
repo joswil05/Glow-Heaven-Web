@@ -6,10 +6,14 @@
 import React, { useState } from 'react';
 import { CartProvider, useCart } from './context/CartContext';
 import { Hero } from './components/Hero';
+import { TrustBar } from './components/TrustBar';
+import { Testimonials } from './components/Testimonials';
+import { Footer } from './components/Footer';
 import { ScentQuiz } from './components/ScentQuiz';
 import { ProductCatalog } from './components/ProductCatalog';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutForm } from './components/CheckoutForm';
+import { GeminiChatbot } from './components/GeminiChatbot';
 import { ShoppingBag, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -117,9 +121,12 @@ function MainAppContent() {
                 }}
               />
 
+              {/* Quick trust bar banner below design block */}
+              <TrustBar />
+
               {/* Scent Matcher Quiz Section (Interactive) */}
               {showQuiz && (
-                <section id="quiz-section" className="w-full max-w-4xl mx-auto px-6 py-16 scroll-mt-20">
+                <section id="quiz-section" className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16 scroll-mt-20">
                   <div className="text-center mb-10">
                     <span className="text-[10px] uppercase tracking-[0.25em] text-editorial-black/50 font-semibold font-mono">Experiencia Interactiva</span>
                     <h3 className="text-3xl md:text-4xl font-serif mt-2 mb-3">Quiz Olfativo</h3>
@@ -161,21 +168,14 @@ function MainAppContent() {
         onProceedToCheckout={() => setView('checkout')}
       />
 
-      {/* Visual Footer */}
-      <footer className="bg-white border-t border-editorial-black/10 px-6 sm:px-10 py-6 text-[10px] uppercase tracking-widest font-medium text-editorial-black">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-center">
-            <span className="font-serif italic font-bold">Glow Heaven</span>
-            <span className="hidden sm:inline text-editorial-black/20">|</span>
-            <span>Inventarios en Tiempo Real Activos</span>
-            <span className="hidden sm:inline text-editorial-black/20">|</span>
-            <span>Envíos Globales</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-editorial-black/50 font-mono text-[9px]">© 2026 GLOW HEAVEN CO.</span>
-          </div>
-        </div>
-      </footer>
+      {/* Testimonials social proof block */}
+      {view === 'main' && <Testimonials />}
+
+      {/* Visual Footer Accordion policies panel */}
+      <Footer />
+
+      {/* Floating Interactive Gemini Chatbot */}
+      <GeminiChatbot />
     </div>
   );
 }

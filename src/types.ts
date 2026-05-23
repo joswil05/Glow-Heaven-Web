@@ -16,7 +16,7 @@ export enum PaymentMethod {
 }
 
 export enum OrderStatus {
-  PENDIENTE = "Pendiente",
+  PENDIENTE = "Pendiente de Pago",
   COMPLETADO = "Completado",
   CANCELADO = "Cancelado"
 }
@@ -26,7 +26,10 @@ export interface Product {
   nombre: string;
   marca: string;
   genero: Gender;
-  notas: string[];
+  categoria: 'perfume' | 'accesorio';
+  notas?: string[];
+  color?: string;
+  material?: string;
   precio: number;
   stock: number;
   imagenUrl: string;
@@ -55,6 +58,7 @@ export interface Order {
   total: number;
   metodo_pago: PaymentMethod;
   estado: OrderStatus;
+  expiraEn: any; // Firebase Timestamp or string date for expiration
 }
 
 export interface CartItem {
