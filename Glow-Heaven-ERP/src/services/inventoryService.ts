@@ -380,19 +380,22 @@ export const addInventoryBatch = async (sku: string, cantidad: number, costoAdqu
 /**
  * Elimina un producto de Firestore y todos sus lotes asociados de forma atómica.
  * 
- * @param sku SKU del producto a eliminar
+ * @param idOrSku ID o SKU del producto a eliminar
  */
-export const deleteProduct = async (sku: string): Promise<void> => {
+export const deleteProduct = async (idOrSku: string): Promise<void> => {
+  if (!idOrSku) {
+    throw new Error("El identificador del producto (ID/SKU) es nulo o indefinido.");
+  }
   try {
     const batch = writeBatch(db);
     
     // 1. Eliminar el documento del producto
-    const productRef = doc(db, 'productos', sku);
+    const productRef = doc(db, 'productos', idOrSku);
     batch.delete(productRef);
 
     // 2. Buscar y eliminar todos los lotes de reabastecimiento asociados
     const lotesRef = collection(db, 'inventario_lotes');
-    const q = query(lotesRef, where('producto_id', '==', sku));
+    const q = query(lotesRef, where('producto_id', '==', idOrSku));
     const querySnapshot = await getDocs(q);
 
     querySnapshot.forEach((doc) => {
@@ -401,9 +404,9 @@ export const deleteProduct = async (sku: string): Promise<void> => {
 
     // 3. Ejecutar el lote de escritura (atomic)
     await batch.commit();
-    console.log(`[ERP] Producto ${sku} y sus lotes asociados eliminados exitosamente.`);
+    console.log(`[ERP] Producto ${idOrSku} y sus lotes asociados eliminados exitosamente.`);
   } catch (error: any) {
-    console.error(`[ERP] Error al eliminar producto ${sku}:`, error.message);
+    console.error(`[ERP] Error al eliminar producto ${idOrSku}:`, error.message);
     throw new Error(`No se pudo eliminar el producto de la base de datos. ${error.message}`);
   }
 };

@@ -51,12 +51,12 @@ export const CatalogManagement: React.FC<CatalogManagementProps> = ({ products }
   // Selected product object
   const selectedProduct = useMemo(() => {
     if (!selectedSku || !Array.isArray(products)) return null;
-    return products.find(p => p.sku === selectedSku) || null;
+    return products.find(p => (p.sku || p.id) === selectedSku) || null;
   }, [selectedSku, products]);
 
   // Handle select product and load values to form
   const handleSelectProduct = (product: ERPProduct) => {
-    setSelectedSku(product.sku);
+    setSelectedSku(product.sku || product.id);
     setActivo(product.activo !== false);
     setPrecio(product.precio || 0);
     setImagenUrl(product.imagenUrl || '');
@@ -189,13 +189,13 @@ export const CatalogManagement: React.FC<CatalogManagementProps> = ({ products }
             </div>
           ) : (
             filteredProducts.map(p => {
-              const isSelected = selectedSku === p.sku;
+              const isSelected = selectedSku === (p.sku || p.id);
               const productStockWeb = typeof p.stock === 'number' ? p.stock : (p.stock_disponible || 0);
               const isVisibleWeb = p.activo !== false;
               
               return (
                 <div 
-                  key={p.sku}
+                  key={p.sku || p.id}
                   onClick={() => handleSelectProduct(p)}
                   className={`p-3.5 flex items-center justify-between cursor-pointer transition-all ${
                     isSelected 
@@ -222,7 +222,7 @@ export const CatalogManagement: React.FC<CatalogManagementProps> = ({ products }
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold font-mono text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 rounded uppercase tracking-wider">{p.sku}</span>
+                        <span className="text-[9px] font-bold font-mono text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 rounded uppercase tracking-wider">{p.sku || p.id}</span>
                         {!isVisibleWeb && (
                           <span className="text-[8px] font-bold text-rose-500 uppercase tracking-widest flex items-center gap-0.5">
                             <EyeOff className="w-2.5 h-2.5" /> Oculto

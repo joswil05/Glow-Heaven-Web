@@ -112,15 +112,16 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
 
   // Handle deleting a product
   const handleDeleteProduct = async (product: ERPProduct) => {
-    if (window.confirm(`⚠️ ¿Estás seguro de que deseas ELIMINAR el producto "${product.nombre}" (${product.sku}) del sistema? Esta acción eliminará el producto del ERP, de la tienda web y borrará de forma permanente todos sus lotes asociados. Esta acción no se puede deshacer.`)) {
+    const idOrSku = product.sku || product.id;
+    if (window.confirm(`⚠️ ¿Estás seguro de que deseas ELIMINAR el producto "${product.nombre}" (${idOrSku}) del sistema? Esta acción eliminará el producto del ERP, de la tienda web y borrará de forma permanente todos sus lotes asociados. Esta acción no se puede deshacer.`)) {
       setIsSubmitting(true);
       setFormError(null);
       setFormSuccess(null);
 
       try {
-        await deleteProduct(product.sku);
+        await deleteProduct(idOrSku);
         setFormSuccess(`¡Producto "${product.nombre}" eliminado con éxito!`);
-        if (selectedSku === product.sku) {
+        if (selectedSku === idOrSku) {
           setSelectedSku('');
         }
       } catch (error: any) {
@@ -293,9 +294,9 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
                   const isUnderStock = (prod.stock_disponible || 0) <= (prod.stock_minimo || 0);
 
                   return (
-                    <tr key={prod.sku} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/30 transition-colors">
+                    <tr key={prod.sku || prod.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/30 transition-colors">
                       <td className="py-3 px-4 font-mono font-bold text-neutral-600 dark:text-neutral-400">
-                        {prod.sku}
+                        {prod.sku || prod.id}
                       </td>
                       <td className="py-3 px-4">
                         <div className="font-bold text-neutral-900 dark:text-white">{prod.nombre}</div>
@@ -324,7 +325,7 @@ export const InventoryManagement: React.FC<InventoryManagementProps> = ({
                       <td className="py-3 px-4 text-center flex items-center justify-center gap-1.5">
                         <button
                           onClick={() => {
-                            setSelectedSku(prod.sku);
+                            setSelectedSku(prod.sku || prod.id);
                             handleTabChange('batch');
                           }}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase font-bold px-2 py-1.5 rounded-md transition-colors cursor-pointer"
